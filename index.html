@@ -618,7 +618,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🤖 Anthropic API key</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Used for door sheet scanning. Get your key at console.anthropic.com</div>
-          <input type="password" id="ejs_anthropic_key" placeholder="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"
+          <input type="password" id="ejs_anthropic_key" placeholder="sk-ant-api03-…"
             style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:12px;box-sizing:border-box">
         </div>
 
@@ -2069,7 +2069,7 @@ async function scanDoorSheet(input){
 
   // Get API key from settings
   const s=loadSettings();
-  const BAKED_KEY='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';
+  const BAKED_KEY='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';
   let apiKey=s.anthropic_key||BAKED_KEY;
   if(!apiKey){
     apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
@@ -2856,7 +2856,7 @@ async function portalScanSheet(input){
 
   // Get API key from settings (stored by admin)
   const s = loadSettings();
-  const BAKED_KEY = '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';
+  const BAKED_KEY = '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';
   const apiKey = s.anthropic_key || BAKED_KEY;
   if(!apiKey){
     statusEl.textContent = '⚠️ Scanner not configured — fill in manually';
