@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2701,7 +2701,23 @@ function showPublicPortal(){
     <!-- ── STEP 2: What is wrong ─────── -->
     <div class="p-screen" id="pstep2">
       <div class="p-step-title">🔍 What is wrong?</div>
-      <div class="p-step-sub">Tell us about the product and the fault.</div>
+      <div class="p-step-sub">Scan your door sheet to fill in the details automatically, or type them in manually.</div>
+
+      <!-- Scanner -->
+      <div class="p-field" style="border-bottom:2px solid var(--accent)">
+        <label class="p-label">📷 Scan door sheet <span style="color:var(--muted);font-weight:400;text-transform:none;font-family:var(--sans)">(optional — auto-fills details below)</span></label>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;background:var(--card2);border:1.5px solid var(--border2);border-radius:var(--r);cursor:pointer;font-size:14px;font-family:var(--sans);color:var(--muted);transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+            📷 Take photo
+            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="portalScanSheet(this)">
+          </label>
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;background:var(--card2);border:1.5px solid var(--border2);border-radius:var(--r);cursor:pointer;font-size:14px;font-family:var(--sans);color:var(--muted);transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+            📁 Upload image
+            <input type="file" accept="image/*" style="display:none" onchange="portalScanSheet(this)">
+          </label>
+        </div>
+        <div id="portalScanStatus" style="font-size:12px;font-family:var(--mono);color:var(--accent);min-height:16px;text-align:center"></div>
+      </div>
 
       <div class="p-field">
         <label class="p-label">Product range <span class="req">*</span></label>
@@ -2829,6 +2845,72 @@ function showPublicPortal(){
   document.body.appendChild(wrap);
   _portalStep=1;
   portalUpdateFaults();
+}
+
+async function portalScanSheet(input){
+  const file = input.files[0]; if(!file) return;
+  const statusEl = document.getElementById('portalScanStatus');
+  statusEl.textContent = '🤖 Reading door sheet…';
+  input.value = '';
+
+  // Get API key from settings (stored by admin)
+  const s = loadSettings();
+  const apiKey = s.anthropic_key||'';
+  if(!apiKey){
+    statusEl.textContent = '⚠️ Scanner not configured — fill in manually';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const base64 = e.target.result.split(',')[1];
+    try{
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
+        body: JSON.stringify({
+          model:'claude-sonnet-4-6', max_tokens:500,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:base64}},
+            {type:'text',text:'This is a door spec sheet or delivery/job sheet. Extract these fields if visible and return ONLY a JSON object, no other text: customer_name, sales_order, door_number (may be labelled door number, slab number, door ref, leaf ref or leaf no), door_type (fire rating e.g. T30 T60 R30), internal_colour, external_colour. Use null for any field not visible.'}
+          ]}]
+        })
+      });
+      const text = await resp.text();
+      if(!resp.ok){
+        statusEl.textContent = '⚠️ Could not read sheet — fill in manually';
+        return;
+      }
+      const data = JSON.parse(text);
+      const clean = (data.content?.[0]?.text||'').replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(clean);
+      let filled = [];
+      if(parsed.door_number){ document.getElementById('p_doorref').value=parsed.door_number; filled.push('door number'); }
+      if(parsed.door_type){
+        // Try to match product range
+        const rangeEl = document.getElementById('p_range');
+        const opts = [...rangeEl.options].map(o=>o.value);
+        const match = opts.find(o=>o.toLowerCase().includes((parsed.door_type||'').toLowerCase().replace(/\s/g,'')));
+        if(match) rangeEl.value=match; filled.push('door type');
+      }
+      if(parsed.internal_colour||parsed.external_colour){
+        const desc = [parsed.internal_colour?'Int: '+parsed.internal_colour:'', parsed.external_colour?'Ext: '+parsed.external_colour:''].filter(Boolean).join(' / ');
+        const prodEl = document.getElementById('p_product');
+        if(!prodEl.value && desc) prodEl.value = desc;
+        filled.push('colours');
+      }
+      statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct if needed' : '⚠️ Could not read details — fill in manually';
+      statusEl.style.color = filled.length ? 'var(--green)' : 'var(--muted)';
+    }catch(e){
+      statusEl.textContent = '⚠️ Could not read sheet — fill in manually';
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 function portalUpdateFaults(){
