@@ -2069,7 +2069,8 @@ async function scanDoorSheet(input){
 
   // Get API key from settings
   const s=loadSettings();
-  let apiKey=s.anthropic_key||'';
+  const BAKED_KEY='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';
+  let apiKey=s.anthropic_key||BAKED_KEY;
   if(!apiKey){
     apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
     if(!apiKey){input.value='';return;}
@@ -2855,7 +2856,8 @@ async function portalScanSheet(input){
 
   // Get API key from settings (stored by admin)
   const s = loadSettings();
-  const apiKey = s.anthropic_key || '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';
+  const BAKED_KEY = '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';
+  const apiKey = s.anthropic_key || BAKED_KEY;
   if(!apiKey){
     statusEl.textContent = '⚠️ Scanner not configured — fill in manually';
     return;
@@ -2883,20 +2885,29 @@ async function portalScanSheet(input){
       });
       const text = await resp.text();
       if(!resp.ok){
-        statusEl.textContent = '⚠️ Could not read sheet — fill in manually';
+        let msg='API error '+resp.status;
+        try{msg=JSON.parse(text).error?.message||msg;}catch(e){}
+        statusEl.textContent='⚠️ '+msg;
         return;
       }
       const data = JSON.parse(text);
-      const clean = (data.content?.[0]?.text||'').replace(/```json|```/g,'').trim();
-      const parsed = JSON.parse(clean);
+      const raw = (data.content?.[0]?.text||'');
+      const clean = raw.replace(/```json|```/g,'').trim();
+      let parsed;
+      try{ parsed = JSON.parse(clean); }
+      catch(e){
+        // Not valid JSON — model may have described the image instead
+        // Try to show partial info
+        statusEl.textContent='⚠️ Could not extract details — try a clearer photo of just the spec sheet';
+        return;
+      }
       let filled = [];
       if(parsed.door_number){ document.getElementById('p_doorref').value=parsed.door_number; filled.push('door number'); }
       if(parsed.door_type){
-        // Try to match product range
         const rangeEl = document.getElementById('p_range');
         const opts = [...rangeEl.options].map(o=>o.value);
         const match = opts.find(o=>o.toLowerCase().includes((parsed.door_type||'').toLowerCase().replace(/\s/g,'')));
-        if(match) rangeEl.value=match; filled.push('door type');
+        if(match){ rangeEl.value=match; filled.push('door type'); }
       }
       if(parsed.internal_colour||parsed.external_colour){
         const desc = [parsed.internal_colour?'Int: '+parsed.internal_colour:'', parsed.external_colour?'Ext: '+parsed.external_colour:''].filter(Boolean).join(' / ');
@@ -2904,10 +2915,10 @@ async function portalScanSheet(input){
         if(!prodEl.value && desc) prodEl.value = desc;
         filled.push('colours');
       }
-      statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct if needed' : '⚠️ Could not read details — fill in manually';
+      statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct if needed' : '⚠️ Sheet read but no details found — fill in manually';
       statusEl.style.color = filled.length ? 'var(--green)' : 'var(--muted)';
     }catch(e){
-      statusEl.textContent = '⚠️ Could not read sheet — fill in manually';
+      statusEl.textContent = '⚠️ '+e.message;
     }
   };
   reader.readAsDataURL(file);
