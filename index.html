@@ -8,7 +8,7 @@
 <style>
 /* ── Reset & Variables ────────────────────────────── */
 *{margin:0;padding:0;box-sizing:border-box}
-:root{
+:root{A
   --bg:#0C0D0F;--surface:#141517;--card:#1C1E21;--card2:#222426;
   --border:#2A2C30;--border2:#333538;
   --text:#F0F0F2;--muted:#7A7D84;--faint:#3A3D44;
@@ -2859,7 +2859,15 @@ function compressImage(dataUrl, maxWidth, quality){
       canvas.width=w; canvas.height=h;
       const ctx=canvas.getContext('2d');
       ctx.drawImage(img,0,0,w,h);
-      resolve(canvas.toDataURL('image/jpeg',quality));
+      // Check size and compress further if needed
+      let result=canvas.toDataURL('image/jpeg',quality);
+      if(result.length>1000000){
+        const canvas2=document.createElement('canvas');
+        canvas2.width=Math.round(w*0.6);canvas2.height=Math.round(h*0.6);
+        canvas2.getContext('2d').drawImage(img,0,0,canvas2.width,canvas2.height);
+        result=canvas2.toDataURL('image/jpeg',0.6);
+      }
+      resolve(result);
     };
     img.src=dataUrl;
   });
