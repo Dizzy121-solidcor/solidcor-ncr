@@ -8,7 +8,7 @@
 <style>
 /* ── Reset & Variables ────────────────────────────── */
 *{margin:0;padding:0;box-sizing:border-box}
-:root{A
+:root{
   --bg:#0C0D0F;--surface:#141517;--card:#1C1E21;--card2:#222426;
   --border:#2A2C30;--border2:#333538;
   --text:#F0F0F2;--muted:#7A7D84;--faint:#3A3D44;
@@ -2069,7 +2069,7 @@ async function scanDoorSheet(input){
 
   // Get API key from settings
   const s=loadSettings();
-  const BAKED_KEY='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';
+  const BAKED_KEY='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';
   let apiKey=s.anthropic_key||BAKED_KEY;
   if(!apiKey){
     apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
@@ -2085,38 +2085,23 @@ async function scanDoorSheet(input){
     const compressed=await compressImage(e.target.result,1200,0.8);
     const base64=compressed.split(',')[1];
     try{
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      const resp=await fetch('/.netlify/functions/scan-door-sheet',{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key':apiKey,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',max_tokens:500,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
-            {type:'text',text:'This is a door spec sheet or delivery/job sheet. Extract these fields if visible and return ONLY a JSON object, no other text: customer_name, sales_order, door_number (may be labelled door number, slab number, door ref, leaf ref or leaf no), door_type (fire rating e.g. T30 T60 R30), internal_colour, external_colour. Use null for any field not visible.'}
-          ]}]
-        })
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({base64,mediaType:'image/jpeg'})
       });
       const text=await resp.text();
       if(!resp.ok){
         let msg='HTTP '+resp.status;
-        try{msg=JSON.parse(text).error?.message||msg;}catch(e){}
-        if(resp.status===401){
-          // Bad key — clear it
-          const cfg=loadSettings();delete cfg.anthropic_key;
-          localStorage.setItem(SETTINGS_KEY,JSON.stringify(cfg));
-          msg='Invalid API key — cleared, try again';
-        }
+        try{msg=JSON.parse(text).error||msg;}catch(e){}
         document.getElementById('scanStatus').textContent='⚠️ '+msg;
         return;
       }
-      const data=JSON.parse(text);
-      const clean=(data.content?.[0]?.text||'').replace(/```json|```/g,'').trim();
-      const parsed=JSON.parse(clean);
+      let parsed;
+      try{parsed=JSON.parse(text);}catch(e){
+        document.getElementById('scanStatus').textContent='⚠️ Bad response — fill in manually';
+        return;
+      }
       if(parsed.customer_name) document.getElementById('ncrCustomer').value=parsed.customer_name;
       if(parsed.sales_order) document.getElementById('ncrSO').value=parsed.sales_order;
       if(parsed.door_number) document.getElementById('ncrDoorRef').value=parsed.door_number;
@@ -2879,62 +2864,31 @@ async function portalScanSheet(input){
   statusEl.textContent = '🤖 Reading door sheet…';
   input.value = '';
 
-  // Get API key from settings (stored by admin)
-  const s = loadSettings();
-  const BAKED_KEY = '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';
-  const apiKey = s.anthropic_key || BAKED_KEY;
-  if(!apiKey){
-    statusEl.textContent = '⚠️ Scanner not configured — fill in manually';
-    return;
-  }
-
   const reader = new FileReader();
   reader.onload = async e => {
-    // Compress image before sending
     const compressed = await compressImage(e.target.result, 1200, 0.8);
     const base64 = compressed.split(',')[1];
-    const mediaType = 'image/jpeg';
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+      const resp = await fetch('/.netlify/functions/scan-door-sheet',{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body: JSON.stringify({
-          model:'claude-sonnet-4-6', max_tokens:500,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:base64}},
-            {type:'text',text:'This is a door spec sheet or delivery/job sheet. Extract these fields if visible and return ONLY a JSON object, no other text: customer_name, sales_order, door_number (may be labelled door number, slab number, door ref, leaf ref or leaf no), door_type (fire rating e.g. T30 T60 R30), internal_colour, external_colour. Use null for any field not visible.'}
-          ]}]
-        })
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({base64, mediaType:'image/jpeg'})
       });
       const text = await resp.text();
       if(!resp.ok){
-        let msg='API error '+resp.status;
-        try{msg=JSON.parse(text).error?.message||msg;}catch(e){}
-        statusEl.textContent='⚠️ '+msg;
+        let msg='Error '+resp.status;
+        try{msg=JSON.parse(text).error||msg;}catch(e){}
+        statusEl.textContent='⚠️ '+msg+' — fill in manually';
         return;
       }
-      const data = JSON.parse(text);
-      const raw = (data.content?.[0]?.text||'');
-      const clean = raw.replace(/```json|```/g,'').trim();
       let parsed;
-      try{ parsed = JSON.parse(clean); }
-      catch(e){
-        // Not valid JSON — model may have described the image instead
-        // Try to show partial info
-        statusEl.textContent='⚠️ Could not extract details — try a clearer photo of just the spec sheet';
-        return;
-      }
+      try{ parsed = JSON.parse(text); }
+      catch(e){ statusEl.textContent='⚠️ Could not extract details — try a clearer photo'; return; }
       let filled = [];
       if(parsed.door_number){ document.getElementById('p_doorref').value=parsed.door_number; filled.push('door number'); }
       if(parsed.door_type){
         const rangeEl = document.getElementById('p_range');
-        const opts = [...rangeEl.options].map(o=>o.value);
-        const match = opts.find(o=>o.toLowerCase().includes((parsed.door_type||'').toLowerCase().replace(/\s/g,'')));
+        const match = [...rangeEl.options].map(o=>o.value).find(o=>o.toLowerCase().includes((parsed.door_type||'').toLowerCase().replace(/\s/g,'')));
         if(match){ rangeEl.value=match; filled.push('door type'); }
       }
       if(parsed.internal_colour||parsed.external_colour){
@@ -2943,7 +2897,7 @@ async function portalScanSheet(input){
         if(!prodEl.value && desc) prodEl.value = desc;
         filled.push('colours');
       }
-      statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct if needed' : '⚠️ Sheet read but no details found — fill in manually';
+      statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct' : '⚠️ Sheet read but no details found — fill in manually';
       statusEl.style.color = filled.length ? 'var(--green)' : 'var(--muted)';
     }catch(e){
       statusEl.textContent = '⚠️ '+e.message;
@@ -3969,6 +3923,7 @@ function buildPortalForm(){
 
   return rows.join('');
 }
+// end
 </script>
 </body>
 </html>
