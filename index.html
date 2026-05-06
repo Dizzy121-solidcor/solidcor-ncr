@@ -3035,10 +3035,7 @@ function portalNext(){
     const faultDetail=(document.getElementById('p_faultdetail')?.value||'').trim();
     const faultOther=(document.getElementById('p_faultother')?.value||'').trim();
     if(!range){showErr('⚠️ Select a product range');return;}
-    if(!product){showErr('⚠️ Enter a product description');return;}
     if(!doorRef){showErr('⚠️ Door reference number is required');return;}
-    if(!faultCat){showErr('⚠️ Select a fault type');return;}
-    if(faultCat.endsWith('– Other')&&!faultOther){showErr('⚠️ Please describe the fault');return;}
     if(!faultDetail){showErr('⚠️ Describe what is wrong');return;}
   }
 
