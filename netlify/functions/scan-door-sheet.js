@@ -26,7 +26,7 @@ exports.handler = async (event) => {
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-        { type: 'text', text: 'This is a Solidcor door spec sheet. Extract these exact fields and return ONLY a JSON object, no other text: door_number (labelled "Door Number"), order_number (labelled "Order Number"), customer_name (labelled "Customer Name"), cust_door_ref (labelled "Cust Door Ref"), range (labelled "Range"), internal_colour (labelled "Door Internal Colour"), external_colour (labelled "Door External Colour"), frame_colour (labelled "Frame Colour"). Use null for any field not visible.' }
+        { type: 'text', text: 'This is a Solidcor door spec sheet. Extract these exact fields and return ONLY a JSON object, no other text: door_number (labelled "Door Number"), order_number (labelled "Order Number"), customer_name (labelled "Customer Name"), cust_door_ref (labelled "Cust Door Ref"), range (labelled "Range"), door_style (labelled "Master Door Style" or "Slave Door Style"), internal_colour (labelled "Door Internal Colour"), external_colour (labelled "Door External Colour"), frame_colour (labelled "Frame Colour"), sheet_type (the large single letter shown prominently on the sheet: "M" = Master door, "S" = Slave door, "F" = Frame), slab_number (labelled "Slab Number" in the Master Slab section if present). Use null for any field not visible.' }
       ]
     }]
   });
