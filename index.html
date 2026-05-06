@@ -3935,4 +3935,14 @@ function buildPortalForm(){
   if(fields.door_type?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">DOOR TYPE</label><input id="p_doortype" type="text" placeholder="T30, T60, R30…" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
   if(fields.so?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">SALES ORDER / REFERENCE</label><input id="p_so" type="text" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
   if(fields.issue?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">ISSUE DESCRIPTION${fields.issue.required?' *':''}</label><textarea id="p_issue" rows="3" placeholder="Describe the problem clearly…" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);resize:vertical;margin-top:3px;font-family:inherit;font-size:13px;box-sizing:border-box"></textarea></div>`);
-  if(fields.units?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">NUMBER OF UNITS AFFECTED</label><inp
+  if(fields.units?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">NUMBER OF UNITS AFFECTED</label><input id="p_units" type="number" min="0" value="1" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
+  if(fields.category?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">CATEGORY</label><select id="p_category" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px"><option value="">— select —</option>${(cfg.categories||[]).map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>`);
+  if(fields.dept?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">DEPARTMENT</label><select id="p_dept" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px"><option value="">— select —</option>${(cfg.departments||[]).map(d=>`<option>${esc(d)}</option>`).join('')}</select></div>`);
+  if(fields.photo?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">PHOTO (optional)</label><input id="p_photo" type="file" accept="image/*" style="width:100%;margin-top:5px"></div>`);
+
+  return rows.join('');
+}
+// end
+</script>
+</body>
+</html>
