@@ -2759,6 +2759,7 @@ function showPublicPortal(){
         <textarea class="p-textarea p-input" id="p_action"
           placeholder="What needs to happen to fix it?" autocapitalize="sentences" style="min-height:70px"></textarea>
       </div>
+      <div id="portalErr" style="padding:0 20px 10px;font-size:12px;color:var(--red);font-family:var(--mono);min-height:16px"></div>
     </div>
 
     <!-- ── STEP 3: How many + disposition ─ -->
@@ -3005,11 +3006,18 @@ function portalNext(){
   const err=document.getElementById('portalErr');
   if(err) err.textContent='';
 
+  // Helper to show error on current step
+  function showErr(msg){
+    // Try portalErr first, then show as alert fallback
+    if(err){ err.textContent=msg; err.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+    else { const el=document.querySelector('.p-screen.active #portalErr')||document.querySelector('.p-screen.active [id$="Err"]'); if(el) el.textContent=msg; }
+  }
+
   if(_portalStep===1){
     const name=(document.getElementById('p_name')?.value||'').trim();
     const area=(document.getElementById('p_area')?.value||'').trim();
-    if(!name){document.getElementById('p_name')?.classList.add('err');if(err)err.textContent='⚠️ Your name is required';return;}
-    if(!area){document.getElementById('p_area')?.classList.add('err');if(err)err.textContent='⚠️ Select a machine or area';return;}
+    if(!name){document.getElementById('p_name')?.classList.add('err');showErr('⚠️ Your name is required');return;}
+    if(!area){document.getElementById('p_area')?.classList.add('err');showErr('⚠️ Select a machine or area');return;}
     document.getElementById('p_name')?.classList.remove('err');
     document.getElementById('p_area')?.classList.remove('err');
   }
@@ -3021,12 +3029,12 @@ function portalNext(){
     const faultCat=(document.getElementById('p_faultcat')?.value||'').trim();
     const faultDetail=(document.getElementById('p_faultdetail')?.value||'').trim();
     const faultOther=(document.getElementById('p_faultother')?.value||'').trim();
-    if(!range){if(err)err.textContent='⚠️ Select a product range';return;}
-    if(!product){if(err)err.textContent='⚠️ Enter a product description';return;}
-    if(!doorRef){if(err)err.textContent='⚠️ Door reference number is required';return;}
-    if(!faultCat){if(err)err.textContent='⚠️ Select a fault type';return;}
-    if(faultCat.endsWith('– Other')&&!faultOther){if(err)err.textContent='⚠️ Please describe the fault';return;}
-    if(!faultDetail){if(err)err.textContent='⚠️ Describe what is wrong';return;}
+    if(!range){showErr('⚠️ Select a product range');return;}
+    if(!product){showErr('⚠️ Enter a product description');return;}
+    if(!doorRef){showErr('⚠️ Door reference number is required');return;}
+    if(!faultCat){showErr('⚠️ Select a fault type');return;}
+    if(faultCat.endsWith('– Other')&&!faultOther){showErr('⚠️ Please describe the fault');return;}
+    if(!faultDetail){showErr('⚠️ Describe what is wrong');return;}
   }
 
   if(_portalStep===3){
