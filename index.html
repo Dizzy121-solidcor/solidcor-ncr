@@ -2897,7 +2897,12 @@ async function portalScanSheet(input){
       if(parsed.slab_number && !parsed.door_number){ document.getElementById('p_doorref').value=parsed.slab_number; filled.push('slab number'); }
       if(parsed.range){
         const rangeEl = document.getElementById('p_range');
-        const match = [...rangeEl.options].map(o=>o.value).find(o=>o.toLowerCase().includes((parsed.range||'').toLowerCase().replace(/\s/g,'')));
+        const rangeVal = (parsed.range||'').trim().toUpperCase();
+        const opts = [...rangeEl.options].map(o=>o.value);
+        // Try exact match first, then partial
+        const match = opts.find(o=>o.toUpperCase()===rangeVal) ||
+                      opts.find(o=>o.toUpperCase().includes(rangeVal)) ||
+                      opts.find(o=>rangeVal.includes(o.toUpperCase().replace(/\s/g,'')));
         if(match){ rangeEl.value=match; filled.push('range'); }
       }
       // Build product description from sheet type + door style + cust ref
