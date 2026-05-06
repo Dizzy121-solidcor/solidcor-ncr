@@ -2942,13 +2942,16 @@ function portalUpdateFaults(){
   _portalFaultCat='';
   const faults=PORTAL_AREA_FAULTS[area]?[...PORTAL_AREA_FAULTS[area],...PORTAL_GENERAL_FAULTS]:PORTAL_GENERAL_FAULTS;
   grid.innerHTML=faults.map(f=>`
-    <button class="fault-btn" onclick="portalPickFault(${JSON.stringify(f.val)},${!!f.other})">${esc(f.label)}</button>
+    <button class="fault-btn" data-val="${esc(f.val)}" onclick="portalPickFault(${JSON.stringify(f.val)},${!!f.other})">${esc(f.label)}</button>
   `).join('');
 }
 
 function portalPickFault(val, isOther){
   document.querySelectorAll('.fault-btn').forEach(b=>b.classList.remove('sel'));
-  event.currentTarget.classList.add('sel');
+  // Find and highlight the clicked button by value
+  document.querySelectorAll('.fault-btn').forEach(b=>{
+    if(b.getAttribute('data-val')===val) b.classList.add('sel');
+  });
   const catInput=document.getElementById('p_faultcat');
   const otherInput=document.getElementById('p_faultother');
   _portalFaultCat=val;
