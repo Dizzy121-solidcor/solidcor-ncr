@@ -2069,7 +2069,7 @@ async function scanDoorSheet(input){
 
   // Get API key from settings
   const s=loadSettings();
-  const BAKED_KEY='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';
+  const BAKED_KEY='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';
   let apiKey=s.anthropic_key||BAKED_KEY;
   if(!apiKey){
     apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
@@ -2082,7 +2082,8 @@ async function scanDoorSheet(input){
   document.getElementById('scanStatus').textContent='🤖 Reading door sheet…';
   const reader=new FileReader();
   reader.onload=async e=>{
-    const base64=e.target.result.split(',')[1];
+    const compressed=await compressImage(e.target.result,1200,0.8);
+    const base64=compressed.split(',')[1];
     try{
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
@@ -2095,7 +2096,7 @@ async function scanDoorSheet(input){
         body:JSON.stringify({
           model:'claude-sonnet-4-6',max_tokens:500,
           messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:base64}},
+            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
             {type:'text',text:'This is a door spec sheet or delivery/job sheet. Extract these fields if visible and return ONLY a JSON object, no other text: customer_name, sales_order, door_number (may be labelled door number, slab number, door ref, leaf ref or leaf no), door_type (fire rating e.g. T30 T60 R30), internal_colour, external_colour. Use null for any field not visible.'}
           ]}]
         })
@@ -2848,6 +2849,22 @@ function showPublicPortal(){
   portalUpdateFaults();
 }
 
+function compressImage(dataUrl, maxWidth, quality){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      let w=img.width, h=img.height;
+      if(w>maxWidth){ h=Math.round(h*maxWidth/w); w=maxWidth; }
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.src=dataUrl;
+  });
+}
+
 async function portalScanSheet(input){
   const file = input.files[0]; if(!file) return;
   const statusEl = document.getElementById('portalScanStatus');
@@ -2856,7 +2873,7 @@ async function portalScanSheet(input){
 
   // Get API key from settings (stored by admin)
   const s = loadSettings();
-  const BAKED_KEY = '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';
+  const BAKED_KEY = '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';
   const apiKey = s.anthropic_key || BAKED_KEY;
   if(!apiKey){
     statusEl.textContent = '⚠️ Scanner not configured — fill in manually';
@@ -2865,7 +2882,10 @@ async function portalScanSheet(input){
 
   const reader = new FileReader();
   reader.onload = async e => {
-    const base64 = e.target.result.split(',')[1];
+    // Compress image before sending
+    const compressed = await compressImage(e.target.result, 1200, 0.8);
+    const base64 = compressed.split(',')[1];
+    const mediaType = 'image/jpeg';
     try{
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
