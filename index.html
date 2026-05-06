@@ -2069,7 +2069,7 @@ async function scanDoorSheet(input){
 
   // Get API key from settings
   const s=loadSettings();
-  const BAKED_KEY='sk-ant-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';
+  const BAKED_KEY='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';
   let apiKey=s.anthropic_key||BAKED_KEY;
   if(!apiKey){
     apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
@@ -2103,12 +2103,19 @@ async function scanDoorSheet(input){
         return;
       }
       if(parsed.customer_name) document.getElementById('ncrCustomer').value=parsed.customer_name;
-      if(parsed.sales_order) document.getElementById('ncrSO').value=parsed.sales_order;
+      if(parsed.order_number) document.getElementById('ncrSO').value=parsed.order_number;
       if(parsed.door_number) document.getElementById('ncrDoorRef').value=parsed.door_number;
-      if(parsed.door_type) document.getElementById('ncrDoorType').value=parsed.door_type;
+      if(parsed.slab_number && !parsed.door_number) document.getElementById('ncrDoorRef').value=parsed.slab_number;
+      if(parsed.range) document.getElementById('ncrDoorType').value=parsed.range;
       if(parsed.internal_colour) document.getElementById('ncrColourInt').value=parsed.internal_colour;
       if(parsed.external_colour) document.getElementById('ncrColourExt').value=parsed.external_colour;
-      document.getElementById('scanStatus').textContent='✓ Details extracted — check and correct if needed';
+      // Build product description from sheet type + style
+      const typeLabel = parsed.sheet_type==='F'?'Frame':parsed.sheet_type==='S'?'Slave door':parsed.sheet_type==='M'?'Master/single door':null;
+      const desc = [parsed.range, typeLabel, parsed.door_style, parsed.cust_door_ref].filter(Boolean).join(' — ');
+      if(desc && document.getElementById('ncrIssue') && !document.getElementById('ncrIssue').value){
+        // Don't overwrite issue — but show in scan status
+      }
+      document.getElementById('scanStatus').textContent='✓ Details extracted — check and correct if needed'+(typeLabel?' ('+typeLabel+')':'');
     }catch(e){
       document.getElementById('scanStatus').textContent='⚠️ '+e.message;
     }
@@ -2887,17 +2894,28 @@ async function portalScanSheet(input){
       catch(e){ statusEl.textContent='⚠️ Could not extract details — try a clearer photo'; return; }
       let filled = [];
       if(parsed.door_number){ document.getElementById('p_doorref').value=parsed.door_number; filled.push('door number'); }
-      if(parsed.door_type){
+      if(parsed.slab_number && !parsed.door_number){ document.getElementById('p_doorref').value=parsed.slab_number; filled.push('slab number'); }
+      if(parsed.range){
         const rangeEl = document.getElementById('p_range');
-        const match = [...rangeEl.options].map(o=>o.value).find(o=>o.toLowerCase().includes((parsed.door_type||'').toLowerCase().replace(/\s/g,'')));
-        if(match){ rangeEl.value=match; filled.push('door type'); }
+        const match = [...rangeEl.options].map(o=>o.value).find(o=>o.toLowerCase().includes((parsed.range||'').toLowerCase().replace(/\s/g,'')));
+        if(match){ rangeEl.value=match; filled.push('range'); }
+      }
+      // Build product description from sheet type + door style + cust ref
+      const typeLabel = parsed.sheet_type==='F'?'Frame':parsed.sheet_type==='S'?'Slave door':parsed.sheet_type==='M'?'Master/single door':null;
+      const prodParts = [parsed.range, typeLabel, parsed.door_style, parsed.cust_door_ref].filter(Boolean);
+      if(prodParts.length){
+        const prodEl = document.getElementById('p_product');
+        if(prodEl && !prodEl.value) prodEl.value = prodParts.join(' — ');
+        filled.push('product');
       }
       if(parsed.internal_colour||parsed.external_colour){
         const desc = [parsed.internal_colour?'Int: '+parsed.internal_colour:'', parsed.external_colour?'Ext: '+parsed.external_colour:''].filter(Boolean).join(' / ');
         const prodEl = document.getElementById('p_product');
-        if(!prodEl.value && desc) prodEl.value = desc;
+        if(prodEl && prodEl.value && desc) prodEl.value += ' | '+desc;
+        else if(prodEl && !prodEl.value && desc) prodEl.value = desc;
         filled.push('colours');
       }
+      if(parsed.customer_name){ const el=document.getElementById('p_customer'); if(el) el.value=parsed.customer_name; filled.push('customer'); }
       statusEl.textContent = filled.length ? '✓ Filled in: '+filled.join(', ')+' — check and correct' : '⚠️ Sheet read but no details found — fill in manually';
       statusEl.style.color = filled.length ? 'var(--green)' : 'var(--muted)';
     }catch(e){
@@ -3917,14 +3935,4 @@ function buildPortalForm(){
   if(fields.door_type?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">DOOR TYPE</label><input id="p_doortype" type="text" placeholder="T30, T60, R30…" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
   if(fields.so?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">SALES ORDER / REFERENCE</label><input id="p_so" type="text" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
   if(fields.issue?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">ISSUE DESCRIPTION${fields.issue.required?' *':''}</label><textarea id="p_issue" rows="3" placeholder="Describe the problem clearly…" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);resize:vertical;margin-top:3px;font-family:inherit;font-size:13px;box-sizing:border-box"></textarea></div>`);
-  if(fields.units?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">NUMBER OF UNITS AFFECTED</label><input id="p_units" type="number" min="0" value="1" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px;box-sizing:border-box"></div>`);
-  if(fields.category?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">CATEGORY</label><select id="p_category" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px"><option value="">— select —</option>${(cfg.categories||[]).map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>`);
-  if(fields.dept?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">DEPARTMENT</label><select id="p_dept" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px"><option value="">— select —</option>${(cfg.departments||[]).map(d=>`<option>${esc(d)}</option>`).join('')}</select></div>`);
-  if(fields.photo?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">PHOTO (optional)</label><input id="p_photo" type="file" accept="image/*" style="width:100%;margin-top:5px"></div>`);
-
-  return rows.join('');
-}
-// end
-</script>
-</body>
-</html>
+  if(fields.units?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">NUMBER OF UNITS AFFECTED</label><inp
