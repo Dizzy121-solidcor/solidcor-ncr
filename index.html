@@ -2948,14 +2948,16 @@ function portalUpdateFaults(){
 
 function portalPickFault(val, isOther){
   document.querySelectorAll('.fault-btn').forEach(b=>b.classList.remove('sel'));
-  // Find and highlight the clicked button by value
   document.querySelectorAll('.fault-btn').forEach(b=>{
     if(b.getAttribute('data-val')===val) b.classList.add('sel');
   });
-  const catInput=document.getElementById('p_faultcat');
+  _portalFaultCat = val;
+  // Set hidden input — try both IDs
+  ['p_faultcat'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.value=val;
+  });
   const otherInput=document.getElementById('p_faultother');
-  _portalFaultCat=val;
-  if(catInput) catInput.value=val;
   if(otherInput){
     otherInput.style.display=isOther?'block':'none';
     if(isOther) otherInput.focus();
@@ -3029,7 +3031,7 @@ function portalNext(){
     const range=(document.getElementById('p_range')?.value||'').trim();
     const product=(document.getElementById('p_product')?.value||'').trim();
     const doorRef=(document.getElementById('p_doorref')?.value||'').trim();
-    const faultCat=(document.getElementById('p_faultcat')?.value||'').trim();
+    const faultCat=(document.getElementById('p_faultcat')?.value||'').trim() || _portalFaultCat || '';
     const faultDetail=(document.getElementById('p_faultdetail')?.value||'').trim();
     const faultOther=(document.getElementById('p_faultother')?.value||'').trim();
     if(!range){showErr('⚠️ Select a product range');return;}
