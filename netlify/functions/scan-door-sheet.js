@@ -26,7 +26,7 @@ exports.handler = async (event) => {
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-        { type: 'text', text: 'This is a door spec sheet or delivery/job sheet. Extract the following fields if visible and return ONLY a JSON object (no other text): customer_name, sales_order, door_reference, door_type. Use null for any field not visible.' }
+        { type: 'text', text: 'This is a Solidcor door spec sheet. Extract these exact fields and return ONLY a JSON object, no other text: door_number (labelled "Door Number"), order_number (labelled "Order Number"), customer_name (labelled "Customer Name"), cust_door_ref (labelled "Cust Door Ref"), range (labelled "Range"), internal_colour (labelled "Door Internal Colour"), external_colour (labelled "Door External Colour"), frame_colour (labelled "Frame Colour"). Use null for any field not visible.' }
       ]
     }]
   });
