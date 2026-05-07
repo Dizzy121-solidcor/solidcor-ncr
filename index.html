@@ -289,7 +289,12 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div class="sb-item" onclick="openRaiseNCR()" id="nav-raise">
         <div class="sb-icon">🔴</div><span>Raise NCR</span>
       </div>
-      <div class="sb-item" onclick="showView('portal')" id="nav-portal">
+      <div class="sb-item" onclick="openReturnScanModal()" id="nav-returnscan">
+        <div class="sb-icon">📦</div><span>Scan Return</span>
+      </div>
+      <div class="sb-item" onclick="generateStockAdjustmentList()" id="nav-stocklist">
+        <div class="sb-icon">📋</div><span>Stock List</span>
+      </div>
         <div class="sb-icon">🌐</div><span>Public Portal</span>
       </div>
       <div class="sb-item" onclick="showView('components')" id="nav-components">
@@ -616,6 +621,29 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div style="max-width:600px">
         <h2 style="font-size:16px;margin-bottom:20px">⚙️ Settings</h2>
 
+        <!-- Component picker -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">🧩 Component picker</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email to notify when a component pick is required for an NCR.</div>
+          <input type="email" id="picker_email" placeholder="picker@solidcor.co.uk"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box">
+        </div>
+
+        <!-- SLA config -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">⏱ SLA targets</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-row" style="padding:0;margin:0"><label style="font-size:11px;color:var(--muted);font-family:var(--mono)">External NCR SLA (days)</label>
+              <input type="number" id="sla_external" placeholder="5" min="1" max="30"
+                style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px">
+            </div>
+            <div class="form-row" style="padding:0;margin:0"><label style="font-size:11px;color:var(--muted);font-family:var(--mono)">Red tag SLA (hours)</label>
+              <input type="number" id="sla_redtag" placeholder="48" min="1"
+                style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px">
+            </div>
+          </div>
+        </div>
+
         <!-- API Key -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🤖 Anthropic API key</div>
@@ -770,8 +798,25 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
         <datalist id="customerList"></datalist>
       </div>
+      <div class="form-row"><label>Customer email <span style="color:var(--muted);font-weight:400">(for notifications)</span></label>
+        <input type="email" id="ncrCustomerEmail" placeholder="customer@example.com">
+      </div>
       <div class="form-row"><label>Sales order</label>
         <input type="text" id="ncrSO" placeholder="SO number">
+      </div>
+    </div>
+    <div class="form-cols">
+      <div class="form-row"><label>NCR type</label>
+        <select id="ncrType">
+          <option value="Door">Door</option>
+          <option value="Window">Window</option>
+          <option value="Component">Component</option>
+          <option value="Frame">Frame</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Door style</label>
+        <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
       </div>
     </div>
     <div class="form-cols">
@@ -1609,28 +1654,98 @@ function renderDashboard(){
   const open = ncrRecords.filter(r=>r.status==='open').length;
   const inprog = ncrRecords.filter(r=>r.status==='inprogress').length;
   const closed = ncrRecords.filter(r=>r.status==='closed').length;
+  const external = ncrRecords.filter(r=>r.type==='external');
+  const internal = ncrRecords.filter(r=>r.type==='internal');
+  const extOpen = external.filter(r=>r.status==='open').length;
+  const intOpen = internal.filter(r=>r.status==='open').length;
   const totalCost = ncrRecords.reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
   const actPending = actions.filter(a=>a.status!=='done').length;
+  const returnsOpen = returns.filter(r=>r.status==='pending'||r.status==='open').length;
+
+  // SLA compliance — external NCRs closed within 5 working days
+  const SLA_DAYS = 5;
+  const closedExt = external.filter(r=>r.status==='closed'&&r.date&&r.completed);
+  const slaPass = closedExt.filter(r=>{
+    const diff=(new Date(r.completed)-new Date(r.date))/(1000*86400);
+    return diff<=SLA_DAYS;
+  }).length;
+  const slaPct = closedExt.length ? Math.round(slaPass/closedExt.length*100) : 100;
+
+  // NCR type breakdown
+  const byNcrType = {};
+  ncrRecords.filter(r=>!r.legacy).forEach(r=>{const t=r.ncr_type||'Door';byNcrType[t]=(byNcrType[t]||0)+1;});
+
+  // 24hr overdue external
+  const now = new Date();
+  const overdue24 = external.filter(r=>{
+    if(r.status!=='open') return false;
+    const age=(now-new Date(r.created_at||r.date))/(1000*3600);
+    return age>24 && !actions.some(a=>(a.ncr_id||a.ncrId)===r.id&&a.status!=='pending');
+  }).length;
 
   document.getElementById('dashStats').innerHTML = `
-    <div class="stat-card red"><div class="stat-val">${open}</div><div class="stat-label">Open NCRs</div><div class="stat-sub">${inprog} in progress</div></div>
-    <div class="stat-card green"><div class="stat-val">${closed}</div><div class="stat-label">Closed</div><div class="stat-sub">of ${ncrRecords.length} total</div></div>
-    <div class="stat-card amber"><div class="stat-val">${actPending}</div><div class="stat-label">Actions pending</div></div>
-    <div class="stat-card blue"><div class="stat-val">${returns.length}</div><div class="stat-label">Returns logged</div></div>
-    <div class="stat-card purple"><div class="stat-val">£${totalCost.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div><div class="stat-label">Total NCR cost</div><div class="stat-sub">excl. legacy</div></div>
-    <div class="stat-card"><div class="stat-val">${ncrRecords.length}</div><div class="stat-label">Total NCRs</div><div class="stat-sub">FY2026</div></div>
+    <div class="stat-card red" style="cursor:pointer" onclick="showView('external')">
+      <div class="stat-val">${extOpen}</div>
+      <div class="stat-label">External open</div>
+      <div class="stat-sub">${overdue24>0?`<span style="color:var(--red)">⚠ ${overdue24} overdue 24hr</span>`:external.length+' total'}</div>
+    </div>
+    <div class="stat-card amber" style="cursor:pointer" onclick="showView('internal')">
+      <div class="stat-val">${intOpen}</div>
+      <div class="stat-label">Internal open</div>
+      <div class="stat-sub">${internal.length} total red tags</div>
+    </div>
+    <div class="stat-card green" style="cursor:pointer" onclick="showView('all')">
+      <div class="stat-val">${closed}</div>
+      <div class="stat-label">Closed</div>
+      <div class="stat-sub">of ${ncrRecords.length} total</div>
+    </div>
+    <div class="stat-card blue" style="cursor:pointer" onclick="showView('actions')">
+      <div class="stat-val">${actPending}</div>
+      <div class="stat-label">Actions pending</div>
+      <div class="stat-sub">${inprog} in progress</div>
+    </div>
+    <div class="stat-card purple" style="cursor:pointer" onclick="showView('returns')">
+      <div class="stat-val">${returnsOpen}</div>
+      <div class="stat-label">Returns open</div>
+      <div class="stat-sub">${returns.length} logged total</div>
+    </div>
+    <div class="stat-card ${slaPct>=90?'green':slaPct>=70?'amber':'red'}">
+      <div class="stat-val">${slaPct}%</div>
+      <div class="stat-label">SLA compliance</div>
+      <div class="stat-sub">${SLA_DAYS}-day external target</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">£${totalCost.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="stat-label">Total NCR cost</div>
+      <div class="stat-sub">excl. legacy</div>
+    </div>
   `;
 
-  // Dept chart
-  const deptCount = {};
-  ncrRecords.filter(r=>!r.legacy).forEach(r=>{if(r.dept)deptCount[r.dept]=(deptCount[r.dept]||0)+1;});
-  const deptMax = Math.max(...Object.values(deptCount));
-  document.getElementById('deptChart').innerHTML = Object.entries(deptCount).sort((a,b)=>b[1]-a[1]).map(([d,n])=>`
+  // Internal vs External trend (last 8 weeks)
+  const weeks = {};
+  ncrRecords.filter(r=>r.date&&!r.legacy).forEach(r=>{
+    const d=new Date(r.date);
+    const wk=`W${Math.ceil(d.getDate()/7)} ${d.toLocaleString('en-GB',{month:'short'})}`;
+    if(!weeks[wk]) weeks[wk]={ext:0,int:0};
+    if(r.type==='external') weeks[wk].ext++; else weeks[wk].int++;
+  });
+  const wkKeys=Object.keys(weeks).slice(-8);
+  const wkMax=Math.max(1,...wkKeys.map(k=>weeks[k].ext+weeks[k].int));
+  document.getElementById('deptChart').innerHTML = `
+    <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em">External vs Internal by week</div>
+    ${wkKeys.map(k=>`
     <div class="bar-row">
-      <div class="bar-label" title="${d}">${d}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${n/deptMax*100}%"></div></div>
-      <div class="bar-val">${n}</div>
-    </div>`).join('');
+      <div class="bar-label">${k}</div>
+      <div class="bar-track" style="position:relative;background:var(--surface)">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${weeks[k].ext/wkMax*100}%;background:var(--accent);opacity:.8;border-radius:3px 0 0 3px"></div>
+        <div style="position:absolute;left:${weeks[k].ext/wkMax*100}%;top:0;bottom:0;width:${weeks[k].int/wkMax*100}%;background:var(--amber);opacity:.8"></div>
+      </div>
+      <div class="bar-val">${weeks[k].ext+weeks[k].int}</div>
+    </div>`).join('')}
+    <div style="display:flex;gap:12px;margin-top:6px;font-size:11px;font-family:var(--mono)">
+      <span><span style="color:var(--accent)">■</span> External</span>
+      <span><span style="color:var(--amber)">■</span> Internal</span>
+    </div>`;
 
   // Category chart (top 8)
   const catCount = {};
@@ -1650,7 +1765,12 @@ function renderDashboard(){
     <div class="action-item" onclick="openDetail('${r.id}')" style="cursor:pointer">
       <div class="action-dot ${r.status==='closed'?'done':r.status==='inprogress'?'pending':''}"></div>
       <div class="action-content">
-        <div class="action-text"><span style="font-family:var(--mono);color:var(--accent)">${r.id}</span> · ${esc(r.customer)} — ${esc(r.issue.slice(0,60))}${r.issue.length>60?'…':''}</div>
+        <div class="action-text">
+          <span style="font-family:var(--mono);color:var(--accent)">${r.id}</span>
+          <span class="badge ${r.type==='external'?'b-external':'b-internal'}" style="font-size:10px;margin:0 4px">${r.type}</span>
+          ${r.ncr_type?`<span class="badge b-plan" style="font-size:10px;margin-right:4px">${r.ncr_type}</span>`:''}
+          ${esc(r.customer)} — ${esc((r.issue||'').slice(0,50))}${(r.issue||'').length>50?'…':''}
+        </div>
         <div class="action-meta">${fmtDate(r.date)} · ${r.dept||'—'} · <span class="${statusCls(r.status)}">${r.status}</span></div>
       </div>
     </div>`).join('');
@@ -1770,7 +1890,9 @@ function openDetail(id){
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddAction('${id}')">+ Action</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openStatusModal('${id}')">Update status</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddReturn(); document.getElementById('retNcr').value='${id}'; document.getElementById('retCustomer').value='${esc(r.customer)}'; document.getElementById('retDoorRef').value='${esc(r.door_ref||'')}'">↩️ Log return</button>
+    <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="generateDoorQR('${esc(r.door_ref||r.id)}','${esc(r.so||'')}','${esc(r.customer)}')">🔗 Door QR</button>
     ${currentUser?.isAdmin ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--accent);border-color:var(--accent)" onclick="openEditNcr('${id}')">✏️ Edit</button>` : ''}
+    ${r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
   `;
 
   const ncrActs = actions.filter(a=>a.ncrId===id);
@@ -2118,7 +2240,8 @@ function pickRaiseFault(btn){
 }
 
 function openRaiseNCR(){
-  ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt','ncrIssue'].forEach(id=>document.getElementById(id).value='');
+  ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt','ncrIssue','ncrCustomerEmail','ncrDoorStyle'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ncrType').value='Door';
   document.getElementById('ncrCategory').value='';
   document.getElementById('ncrCategoryOther').value='';
   document.getElementById('ncrCategoryOther').style.display='none';
@@ -2246,6 +2369,9 @@ function submitNCR(){
     id, date:new Date().toISOString().slice(0,10),
     customer, so:document.getElementById('ncrSO').value.trim(),
     door_ref:doorRef, door_type:document.getElementById('ncrDoorType').value.trim(),
+    door_style:document.getElementById('ncrDoorStyle').value.trim(),
+    ncr_type:document.getElementById('ncrType').value||'Door',
+    customer_email:document.getElementById('ncrCustomerEmail').value.trim(),
     colour_int:document.getElementById('ncrColourInt').value.trim(),
     colour_ext:document.getElementById('ncrColourExt').value.trim(),
     issue, units:parseFloat(document.getElementById('ncrUnits').value)||1,
@@ -2271,6 +2397,10 @@ function submitNCR(){
     saveDoorSheetImage(id, window._pendingDoorSheetImage);
     window._pendingDoorSheetImage = null;
   }
+
+  // Send customer submission email if email provided
+  if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
+
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
   showView('detail');
@@ -2284,9 +2414,327 @@ function submitNCR(){
   setTimeout(()=>runTaskRules(newNCR), 500);
 }
 
+
 // ═══════════════════════════════════════════════════════════════
-// RULES ENGINE — suggest/create maint hub tasks from NCR
+// CUSTOMER EMAILS — submission + resolution notifications
 // ═══════════════════════════════════════════════════════════════
+async function sendCustomerSubmissionEmail(ncr){
+  if(!ncr.customer_email) return;
+  const s = loadSettings();
+  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey) return;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:16px 24px"><span style="color:#E07B1A;font-weight:700;font-size:18px;font-family:monospace">SOLIDCOR</span><span style="color:#7A7E8A;font-size:12px;margin-left:10px">Quality Assurance</span></div>
+    <div style="padding:24px">
+      <h2 style="color:#E07B1A;font-size:18px;margin:0 0 16px">Your NCR has been received</h2>
+      <p style="font-size:14px;color:#333;line-height:1.6">Thank you for raising this with us. We have logged your non-conformance report and our quality team will be in touch within <strong>5 working days</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px">
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600;width:160px">Reference</td><td style="padding:8px 10px;border-bottom:1px solid #eee;font-family:monospace;font-weight:700;color:#E07B1A">${ncr.id}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Date raised</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Door reference</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.door_ref||'—'}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Issue reported</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.issue}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Sales order</td><td style="padding:8px 10px">${ncr.so||'—'}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;margin-top:20px;line-height:1.6">Please quote your reference number <strong>${ncr.id}</strong> in any correspondence with us regarding this matter.</p>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor Quality Team · This is an automated notification</div>
+  </div>`;
+  await sendNcrEmail(ncr.customer_email, `[Solidcor] NCR Received — ${ncr.id} — ${ncr.door_ref||ncr.customer}`, html);
+}
+
+async function sendCustomerResolutionEmail(ncr, resolutionDetail){
+  if(!ncr.customer_email) return;
+  const s = loadSettings();
+  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey) return;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #22c55e">
+    <div style="background:#111316;padding:16px 24px"><span style="color:#E07B1A;font-weight:700;font-size:18px;font-family:monospace">SOLIDCOR</span><span style="color:#7A7E8A;font-size:12px;margin-left:10px">Quality Assurance</span></div>
+    <div style="padding:24px">
+      <h2 style="color:#22c55e;font-size:18px;margin:0 0 16px">✓ Your NCR has been resolved</h2>
+      <p style="font-size:14px;color:#333;line-height:1.6">We are pleased to confirm that the following non-conformance report has been resolved.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px">
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600;width:160px">Reference</td><td style="padding:8px 10px;border-bottom:1px solid #eee;font-family:monospace;font-weight:700;color:#E07B1A">${ncr.id}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Door reference</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.door_ref||'—'}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Original issue</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.issue}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Action taken</td><td style="padding:8px 10px;border-bottom:1px solid #eee">${resolutionDetail||ncr.corrective||'—'}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Resolved on</td><td style="padding:8px 10px">${new Date().toLocaleDateString('en-GB')}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;margin-top:20px;line-height:1.6">If you have any further questions about this matter, please contact our quality team quoting reference <strong>${ncr.id}</strong>.</p>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor Quality Team · This is an automated notification</div>
+  </div>`;
+  await sendNcrEmail(ncr.customer_email, `[Solidcor] NCR Resolved — ${ncr.id}`, html);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMPONENT PICKER — assign to picker, send email
+// ═══════════════════════════════════════════════════════════════
+const PICKER_KEY = 'ncr_picker_config';
+function loadPickerConfig(){ try{return JSON.parse(localStorage.getItem(PICKER_KEY)||'{}');}catch(e){return{};} }
+
+async function notifyComponentPicker(ncrId, componentName, qty){
+  const cfg = loadPickerConfig();
+  if(!cfg.picker_email) return;
+  const s = loadSettings();
+  if(!s.ejs_service) return;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:500px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:14px 20px"><span style="color:#E07B1A;font-weight:700;font-family:monospace">SOLIDCOR</span><span style="color:#7A7E8A;font-size:12px;margin-left:10px">Component Pick Request</span></div>
+    <div style="padding:20px">
+      <h3 style="color:#E07B1A;margin:0 0 12px">🧩 Pick required for NCR ${ncrId}</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600;width:120px">Component</td><td style="padding:7px 10px;border-bottom:1px solid #eee">${componentName}</td></tr>
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600">Quantity</td><td style="padding:7px 10px;border-bottom:1px solid #eee">${qty}</td></tr>
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600">NCR ref</td><td style="padding:7px 10px">${ncrId}</td></tr>
+      </table>
+    </div>
+  </div>`;
+  await sendNcrEmail(cfg.picker_email, `[Solidcor] Pick required — ${componentName} for NCR ${ncrId}`, html);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DAILY STOCK ADJUSTMENT LIST
+// ═══════════════════════════════════════════════════════════════
+function generateStockAdjustmentList(){
+  const today = new Date().toISOString().slice(0,10);
+  const openNcrs = ncrRecords.filter(r=>r.status==='open'&&r.cost>0);
+
+  // Red tag SLA check — internal NCRs open > 48hrs
+  const now = new Date();
+  const redTagBreached = ncrRecords.filter(r=>{
+    if(r.type!=='internal'||r.status!=='open') return false;
+    const age = (now - new Date(r.created_at||r.date)) / (1000*3600);
+    return age > 48;
+  });
+
+  let csv = `Solidcor NCR Stock Adjustment List — ${today}\n`;
+  csv += `Generated by NCR Hub\n\n`;
+  csv += `NCR ID,Customer,Door Ref,Issue,Cost (£),Dept,Status,Days Open\n`;
+
+  openNcrs.forEach(r=>{
+    const days = Math.floor((now - new Date(r.created_at||r.date)) / (1000*86400));
+    csv += `${r.id},"${r.customer}","${r.door_ref||''}","${r.issue||''}",${r.cost||0},${r.dept||''},${r.status},${days}\n`;
+  });
+
+  if(redTagBreached.length){
+    csv += `\n\nRED TAG SLA BREACHES (>48 hours open)\n`;
+    csv += `NCR ID,Raised By,Area,Issue,Hours Open\n`;
+    redTagBreached.forEach(r=>{
+      const hrs = Math.floor((now - new Date(r.created_at||r.date)) / (1000*3600));
+      csv += `${r.id},"${r.raised_by||''}","${r.dept||''}","${r.issue||''}",${hrs}\n`;
+    });
+  }
+
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `stock-adjustment-${today}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('✓ Stock adjustment list downloaded');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RETURN SCANNING — QR scan on returned door
+// ═══════════════════════════════════════════════════════════════
+function openReturnScanModal(){
+  const html = `<div class="modal-overlay" id="returnScanModal" onclick="if(event.target===this)this.remove()" style="z-index:9999">
+    <div class="modal" style="width:min(480px,95vw)">
+      <h3>📦 Scan Returned Door</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Scan the QR code on the returned door or enter the door reference manually.</p>
+      <div class="form-row"><label>Door reference / NCR ID</label>
+        <input type="text" id="returnScanRef" placeholder="e.g. 7686-0001S or NCR26-001" autofocus
+          style="font-size:16px" onkeydown="if(event.key==='Enter')processReturnScan()">
+      </div>
+      <div class="form-row"><label>Condition on return</label>
+        <select id="returnScanCondition">
+          <option value="Good">Good — as expected</option>
+          <option value="Damaged">Damaged — additional damage found</option>
+          <option value="Incomplete">Incomplete — missing components</option>
+          <option value="Wrong item">Wrong item returned</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Notes</label>
+        <textarea id="returnScanNotes" rows="2" placeholder="Any additional notes about the return…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" onclick="document.getElementById('returnScanModal').remove()">Cancel</button>
+        <button class="primary" onclick="processReturnScan()">Log return</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(()=>document.getElementById('returnScanRef')?.focus(), 100);
+}
+
+async function processReturnScan(){
+  const ref = (document.getElementById('returnScanRef')?.value||'').trim();
+  const condition = document.getElementById('returnScanCondition')?.value||'Good';
+  const notes = document.getElementById('returnScanNotes')?.value||'';
+  if(!ref){showToast('⚠️ Enter a door reference or NCR ID');return;}
+
+  // Find matching NCR
+  const ncr = ncrRecords.find(r=>r.id===ref||r.door_ref===ref||r.door_ref?.includes(ref));
+
+  const ret = {
+    id: 'ret_'+Date.now(),
+    ncr_id: ncr?.id||null,
+    customer: ncr?.customer||'Unknown',
+    door_ref: ref,
+    type: 'scanned_return',
+    condition,
+    notes,
+    date: new Date().toISOString().slice(0,10),
+    status: 'received',
+    logged_by: currentUser?.name||'Unknown'
+  };
+
+  returns.push(ret);
+  await sbUps('ncr_returns', ret).catch(()=>{});
+
+  // If NCR exists and was unresolved — create inspection task
+  if(ncr && ncr.status==='open'){
+    const task = {
+      id: 'act_ret_'+Date.now(),
+      ncr_id: ncr.id,
+      description: `Returned door received — inspection required. Condition: ${condition}. ${notes}`,
+      type: 'investigation',
+      assigned: currentUser?.name||'Quality',
+      dept: 'Quality',
+      due_date: new Date(Date.now()+86400000).toISOString().slice(0,10),
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+    actions.push(task);
+    await sbUps('ncr_actions', task).catch(()=>{});
+    showToast(`✓ Return logged — inspection task created for ${ncr.id}`);
+  } else {
+    showToast('✓ Return logged — '+ref);
+  }
+
+  document.getElementById('returnScanModal')?.remove();
+  renderReturns(); updateBadges();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOMER QR CODES PER DOOR — satisfaction survey
+// ═══════════════════════════════════════════════════════════════
+function generateDoorQR(doorRef, soNumber, customerName){
+  const s = loadSettings();
+  const baseUrl = s.portal_url || window.location.origin;
+  const url = `${baseUrl}?portal=ncr&door=${encodeURIComponent(doorRef)}&so=${encodeURIComponent(soNumber||'')}`;
+
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `<div class="modal-overlay" id="doorQrModal" onclick="if(event.target===this)this.remove()" style="z-index:9999">
+    <div class="modal" style="width:min(400px,95vw);text-align:center">
+      <h3>🔗 Door QR Code</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${esc(doorRef)}${customerName?' — '+esc(customerName):''}</p>
+      <div id="doorQrCanvas" style="display:flex;justify-content:center;margin-bottom:12px"></div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;background:var(--surface);border-radius:var(--r);padding:8px 12px;margin-bottom:14px">${url}</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="top-btn ghost" onclick="document.getElementById('doorQrModal').remove()">Close</button>
+        <button class="top-btn primary" onclick="downloadDoorQR('${esc(doorRef)}')">📥 Download</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(wrap);
+
+  // Generate QR with logo
+  const qrEl = document.getElementById('doorQrCanvas');
+  const size = 200, logoSize = 40;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = ()=>{
+    const canvas = document.createElement('canvas');
+    canvas.id = 'doorQrCanvasEl';
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, size, size);
+    const lx=(size-logoSize)/2, ly=(size-logoSize)/2, r=8;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.moveTo(lx+r,ly);ctx.lineTo(lx+logoSize-r,ly);ctx.quadraticCurveTo(lx+logoSize,ly,lx+logoSize,ly+r);ctx.lineTo(lx+logoSize,ly+logoSize-r);ctx.quadraticCurveTo(lx+logoSize,ly+logoSize,lx+logoSize-r,ly+logoSize);ctx.lineTo(lx+r,ly+logoSize);ctx.quadraticCurveTo(lx,ly+logoSize,lx,ly+logoSize-r);ctx.lineTo(lx,ly+r);ctx.quadraticCurveTo(lx,ly,lx+r,ly);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#E07B1A';
+    ctx.beginPath();ctx.moveTo(lx+r+2,ly+2);ctx.lineTo(lx+logoSize-r-2,ly+2);ctx.quadraticCurveTo(lx+logoSize-2,ly+2,lx+logoSize-2,ly+r+2);ctx.lineTo(lx+logoSize-2,ly+logoSize-r-2);ctx.quadraticCurveTo(lx+logoSize-2,ly+logoSize-2,lx+logoSize-r-2,ly+logoSize-2);ctx.lineTo(lx+r+2,ly+logoSize-2);ctx.quadraticCurveTo(lx+2,ly+logoSize-2,lx+2,ly+logoSize-r-2);ctx.lineTo(lx+2,ly+r+2);ctx.quadraticCurveTo(lx+2,ly+2,lx+r+2,ly+2);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#fff';ctx.font=`800 ${logoSize*0.58}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('S',size/2,size/2+1);
+    canvas.style.cssText='border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.2)';
+    qrEl.innerHTML='';qrEl.appendChild(canvas);
+  };
+  img.src=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(url)}`;
+}
+
+function downloadDoorQR(doorRef){
+  const canvas = document.getElementById('doorQrCanvasEl');
+  if(!canvas){showToast('⚠️ QR not ready');return;}
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `solidcor-qr-${doorRef.replace(/[^a-z0-9]/gi,'-')}.png`;
+  a.click();
+}
+
+// Satisfaction survey portal
+function showSatisfactionSurvey(doorRef, soNumber){
+  const wrap = document.createElement('div');
+  wrap.id = 'surveyWrap';
+  wrap.innerHTML = `<div style="min-height:100vh;background:var(--bg);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px">
+    <div style="width:100%;max-width:500px">
+      <div style="background:#111316;border-bottom:3px solid var(--accent);padding:14px 20px;border-radius:var(--r) var(--r) 0 0;display:flex;align-items:center;gap:12px">
+        <span style="color:var(--accent);font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
+        <span style="color:var(--muted);font-size:12px">Customer Satisfaction Survey</span>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border2);border-top:none;border-radius:0 0 var(--r) var(--r);padding:20px">
+        <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Thank you for choosing Solidcor. Please take a moment to rate your experience.</p>
+        <div style="font-weight:600;font-size:13px;margin-bottom:8px">How satisfied are you with your door? <span style="color:var(--red)">*</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:16px" id="surveyRating">
+          ${[1,2,3,4,5].map(n=>`<button onclick="selectRating(${n})" data-r="${n}" style="flex:1;padding:12px;border:1.5px solid var(--border2);border-radius:var(--r);background:var(--surface);font-size:20px;cursor:pointer;transition:all .15s">${['😞','😕','😐','😊','😄'][n-1]}<div style="font-size:11px;font-family:var(--mono)">${n}/5</div></button>`).join('')}
+        </div>
+        <input type="hidden" id="surveyRatingVal">
+        <div class="form-row" style="padding:0;margin-bottom:12px"><label style="font-size:12px;color:var(--muted);font-family:var(--mono)">Comments (optional)</label>
+          <textarea id="surveyComments" rows="3" placeholder="Any feedback on quality, delivery or installation…" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);resize:vertical;margin-top:4px;font-family:inherit;box-sizing:border-box"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button onclick="submitSurvey('${doorRef}','${soNumber}')" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:var(--r);color:#fff;font-size:14px;font-weight:600;cursor:pointer">Submit feedback</button>
+          <button onclick="showPublicPortal()" style="padding:11px 16px;background:transparent;border:1px solid var(--border2);border-radius:var(--r);color:var(--muted);cursor:pointer;font-size:13px">Report an issue instead →</button>
+        </div>
+        <div id="surveyStatus" style="font-size:12px;font-family:var(--mono);min-height:16px"></div>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(wrap);
+}
+
+function selectRating(n){
+  document.getElementById('surveyRatingVal').value = n;
+  document.querySelectorAll('#surveyRating button').forEach((b,i)=>{
+    b.style.borderColor = i+1===n ? 'var(--accent)' : 'var(--border2)';
+    b.style.background = i+1===n ? 'rgba(224,123,26,.1)' : 'var(--surface)';
+  });
+}
+
+async function submitSurvey(doorRef, soNumber){
+  const rating = document.getElementById('surveyRatingVal').value;
+  const comments = document.getElementById('surveyComments').value.trim();
+  const st = document.getElementById('surveyStatus');
+  if(!rating){st.style.color='var(--red)';st.textContent='⚠️ Please select a rating';return;}
+  const survey = {id:'survey_'+Date.now(), door_ref:doorRef, so:soNumber, rating:parseInt(rating), comments, created_at:new Date().toISOString()};
+  await sbUps('ncr_surveys', survey).catch(()=>{});
+  st.style.color='var(--green)';
+  st.textContent='✓ Thank you for your feedback!';
+  setTimeout(()=>{
+    document.getElementById('surveyWrap')?.remove();
+    showPublicPortal();
+  }, 2000);
+}
+
+// Check portal URL params for door-specific QR scans
+function checkPortalParams(){
+  const params = new URLSearchParams(window.location.search);
+  const door = params.get('door');
+  const so = params.get('so');
+  const survey = params.get('survey');
+  if(survey==='1' && door){ showSatisfactionSurvey(door, so||''); return; }
+  if(door){
+    // Pre-fill door ref in portal form
+    window._preFillDoor = door;
+    window._preFillSO = so;
+  }
+}
+
 function matchesRule(rule, ncr){
   const cat = (ncr.category||'').toLowerCase();
   const iss = (ncr.issue||'').toLowerCase();
@@ -2473,9 +2921,14 @@ function saveSettings(){
     email_return:document.getElementById('email_return').value.trim(),
     email_credit:document.getElementById('email_credit').value.trim(),
     email_inspect:document.getElementById('email_inspect').value.trim(),
-    portal_url:document.getElementById('portal_url').value.trim().replace(/\/$/,'')
+    portal_url:document.getElementById('portal_url').value.trim().replace(/\/$/,''),
+    picker_email:document.getElementById('picker_email').value.trim(),
+    sla_external:parseInt(document.getElementById('sla_external').value)||5,
+    sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
   localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));
+  // Save picker config separately
+  localStorage.setItem(PICKER_KEY,JSON.stringify({picker_email:s.picker_email}));
   const st=document.getElementById('settingsStatus');
   st.textContent='✓ Settings saved';st.style.color='var(--green)';
   setTimeout(()=>st.textContent='',2500);
@@ -2483,8 +2936,8 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url'].forEach(k=>{
-    const el=document.getElementById(k);if(el&&s[k])el.value=s[k];
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','sla_external','sla_redtag'].forEach(k=>{
+    const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
 
@@ -2594,12 +3047,27 @@ function updatePortalView(){
 
 function copyPortalLink(){navigator.clipboard.writeText(getPortalUrl()).then(()=>showToast('🔗 Link copied'));}
 
+function sendResolutionEmailPrompt(ncrId){
+  const ncr = ncrRecords.find(r=>r.id===ncrId);
+  if(!ncr||!ncr.customer_email){showToast('⚠️ No customer email on this NCR');return;}
+  const resolution = prompt(`Send resolution email to ${ncr.customer_email}\n\nDescribe the action taken:`);
+  if(resolution===null) return;
+  sendCustomerResolutionEmail(ncr, resolution).then(()=>showToast('✓ Resolution email sent to '+ncr.customer_email));
+}
+
 function checkPortalMode(){
-  if(new URLSearchParams(window.location.search).get('portal')==='ncr'){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('portal')==='ncr'){
     document.getElementById('loginGate').style.display='none';
     document.getElementById('app').style.display='none';
-    showPublicPortal();
+    if(params.get('survey')==='1'){
+      showSatisfactionSurvey(params.get('door')||'', params.get('so')||'');
+    } else {
+      showPublicPortal();
+    }
+    return true;
   }
+  return false;
 }
 // ════════════════════════════════════════════════════════════════
 // PUBLIC PORTAL — 4-step red-tag style form
