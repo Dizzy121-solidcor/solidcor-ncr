@@ -423,6 +423,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 
     <!-- ACTION LOG -->
     <div class="view" id="view-actions">
+      <div id="overdueNcrBanner" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--red)"></div>
       <div class="filter-bar">
         <input type="text" id="actSearch" placeholder="Search actions…" oninput="renderActions()">
         <select id="actDept" onchange="renderActions()"><option value="">All departments</option></select>
@@ -432,6 +433,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="inprogress">In progress</option>
           <option value="done">Done</option>
         </select>
+        <button class="top-btn primary" onclick="openAddAction(null)" style="margin-left:auto">+ Add task</button>
       </div>
       <div class="tbl-wrap">
         <div class="tbl-scroll"><table><thead><tr>
@@ -870,9 +872,9 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 <!-- ACTION MODAL -->
 <div class="modal-overlay hidden" id="actionModal">
   <div class="modal">
-    <h3>✅ Add Action</h3>
-    <div class="form-row"><label>NCR</label>
-      <input type="text" id="actNcrId" readonly style="background:var(--faint)">
+    <h3 id="actionModalTitle">✅ Add Action</h3>
+    <div class="form-row" id="actNcrRow"><label>Linked NCR</label>
+      <input type="text" id="actNcrId" placeholder="NCR number (optional)" style="background:var(--surface)">
     </div>
     <div class="form-row"><label>Action description <span class="req-star">*</span></label>
       <textarea id="actDesc" rows="3" placeholder="What needs to be done?"></textarea>
@@ -893,9 +895,18 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <option>Frame CNC</option><option>Office</option>
       </select>
     </div>
+    <div class="form-row"><label>Type</label>
+      <select id="actType">
+        <option value="action">Action</option>
+        <option value="task">Task</option>
+        <option value="investigation">Investigation</option>
+        <option value="follow-up">Follow-up</option>
+        <option value="sign-off">Sign-off required</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="top-btn ghost" onclick="closeModal('actionModal')">Cancel</button>
-      <button class="top-btn primary" onclick="saveAction()">Save action</button>
+      <button class="top-btn primary" onclick="saveAction()">Save</button>
     </div>
   </div>
 </div>
@@ -1566,6 +1577,7 @@ function showView(v){
   if(v==='components') renderComponents();
   if(v==='portalconfig') renderPortalConfig();
   if(v==='users') renderUsersList();
+  if(v==='actions') setTimeout(checkOverdueNcrs, 100);
 }
 function goBack(){ showView(lastView); }
 
@@ -1790,6 +1802,11 @@ function openDetail(id){
       <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
     </div>
 
+    <div class="detail-card" id="doorSheetCard">
+      <h4>📷 Door sheet images</h4>
+      <div id="doorSheetImages" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
+    </div>
+
     <div class="detail-card" id="rcaCard">
       <h4>🔬 Root cause analysis</h4>
       <div id="rcaBody">
@@ -1806,6 +1823,18 @@ function openDetail(id){
   `;
 
   loadAuditTrail(id);
+  loadNcrImages(id).then(imgs=>{
+    const el=document.getElementById('doorSheetImages');
+    if(!el) return;
+    if(!imgs||!imgs.length){
+      el.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No door sheet images saved for this NCR.</div>';
+      return;
+    }
+    el.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">${imgs.map(img=>`
+      <a href="${img.image_data}" target="_blank" title="Click to open full size">
+        <img src="${img.image_data}" style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border2);cursor:pointer">
+      </a>`).join('')}</div>`;
+  });
 
   document.getElementById('detailSide').innerHTML = `
     <div class="detail-card">
@@ -1842,47 +1871,116 @@ function field(label,val,cls=''){
 
 // ── Actions ───────────────────────────────────────────────────────
 function openAddAction(ncrId){
-  document.getElementById('actNcrId').value = ncrId;
+  document.getElementById('actNcrId').value = ncrId||'';
+  document.getElementById('actNcrId').readOnly = !!ncrId;
+  document.getElementById('actNcrId').style.background = ncrId?'var(--faint)':'var(--surface)';
+  document.getElementById('actionModalTitle').textContent = ncrId?'✅ Add Action':'✅ Add Task';
   document.getElementById('actDesc').value = '';
   document.getElementById('actAssigned').value = currentUser?.name||'';
   document.getElementById('actDue').value = '';
   document.getElementById('actDeptSel').value = '';
+  document.getElementById('actType').value = 'action';
   openModal('actionModal');
 }
+
 function saveAction(){
   const desc = document.getElementById('actDesc').value.trim();
   if(!desc){showToast('⚠️ Enter an action description');return;}
+  const ncrId = document.getElementById('actNcrId').value.trim()||null;
   const act = {
     id:'act_'+Date.now(),
-    ncrId:document.getElementById('actNcrId').value,
-    desc, assigned:document.getElementById('actAssigned').value.trim(),
-    dept:document.getElementById('actDeptSel').value,
-    due:document.getElementById('actDue').value,
-    status:'pending', createdBy:currentUser?.name||'Unknown',
-    createdAt:new Date().toISOString()
+    ncr_id: ncrId,
+    ncrId: ncrId, // keep both for compat
+    description: desc,
+    desc, // keep both for compat
+    assigned: document.getElementById('actAssigned').value.trim(),
+    dept: document.getElementById('actDeptSel').value,
+    type: document.getElementById('actType').value,
+    due_date: document.getElementById('actDue').value||null,
+    due: document.getElementById('actDue').value||null,
+    status:'pending',
+    created_by: currentUser?.name||'Unknown',
+    createdBy: currentUser?.name||'Unknown',
+    created_at: new Date().toISOString()
   };
   actions.push(act);
-  saveActions();
+  // Save to Supabase
+  sbUps('ncr_actions', {
+    id: act.id, ncr_id: ncrId,
+    description: desc, type: act.type,
+    assigned: act.assigned, dept: act.dept,
+    due_date: act.due_date, status: 'pending',
+    created_at: act.created_at
+  }).catch(()=>localStorage.setItem('ncr_actions',JSON.stringify(actions)));
   closeModal('actionModal');
-  showToast('Action saved ✓');
+  showToast('Task saved ✓');
   renderActions();
   updateBadges();
-  const ncrId=act.ncrId;
-  if(document.getElementById('view-detail').classList.contains('active')) openDetail(ncrId);
+  if(ncrId && document.getElementById('view-detail').classList.contains('active')) openDetail(ncrId);
 }
+
 function toggleActionStatus(id){
   const a=actions.find(x=>x.id===id);
   if(!a)return;
   const order=['pending','inprogress','done'];
   a.status=order[(order.indexOf(a.status)+1)%order.length];
-  saveActions();
+  sbPatch('ncr_actions',id,{status:a.status}).catch(()=>localStorage.setItem('ncr_actions',JSON.stringify(actions)));
   renderActions();
   updateBadges();
-  const ncrId=a.ncrId;
-  if(document.getElementById('view-detail').classList.contains('active')) openDetail(ncrId);
-  showToast('Action updated');
+  const ncrId=a.ncrId||a.ncr_id;
+  if(ncrId && document.getElementById('view-detail').classList.contains('active')) openDetail(ncrId);
+  showToast('Task updated');
 }
 function saveActions(){localStorage.setItem('ncr_actions',JSON.stringify(actions));}
+
+// ═══════════════════════════════════════════════════════════════
+// 24HR FLAG — external NCRs not progressed
+// ═══════════════════════════════════════════════════════════════
+function checkOverdueNcrs(){
+  const now = new Date();
+  const cutoff = new Date(now - 24*3600*1000);
+  const overdue = ncrRecords.filter(r=>{
+    if(r.type!=='external') return false;
+    if(r.status!=='open') return false;
+    const created = new Date(r.created_at||r.date);
+    if(created > cutoff) return false;
+    // Check if any action exists
+    const hasAction = actions.some(a=>(a.ncr_id||a.ncrId)===r.id && a.status!=='pending');
+    return !hasAction;
+  });
+
+  const banner = document.getElementById('overdueNcrBanner');
+  if(!banner) return;
+
+  if(overdue.length){
+    banner.style.display='block';
+    banner.innerHTML = `⚠️ <strong>${overdue.length} external NCR${overdue.length>1?'s':''}</strong> raised over 24 hours ago with no action taken: ${overdue.map(r=>`<span onclick="openDetail('${r.id}')" style="cursor:pointer;text-decoration:underline">${esc(r.id)}</span>`).join(', ')}`;
+  } else {
+    banner.style.display='none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DOOR SHEET IMAGE — save against NCR
+// ═══════════════════════════════════════════════════════════════
+async function saveDoorSheetImage(ncrId, dataUrl){
+  if(!ncrId || !dataUrl) return;
+  const img = {
+    id: 'img_'+Date.now(),
+    ncr_id: ncrId,
+    image_data: dataUrl,
+    image_type: 'door_sheet',
+    created_at: new Date().toISOString(),
+    created_by: currentUser?.name||'Unknown'
+  };
+  await sbUps('ncr_images', img).catch(()=>{});
+}
+
+async function loadNcrImages(ncrId){
+  try{
+    return await sbGet('ncr_images', `ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.desc`);
+  }catch(e){ return []; }
+}
 
 function renderActions(){
   const search=(document.getElementById('actSearch')?.value||'').toLowerCase();
@@ -2109,12 +2207,10 @@ async function scanDoorSheet(input){
       if(parsed.range) document.getElementById('ncrDoorType').value=parsed.range;
       if(parsed.internal_colour) document.getElementById('ncrColourInt').value=parsed.internal_colour;
       if(parsed.external_colour) document.getElementById('ncrColourExt').value=parsed.external_colour;
-      // Build product description from sheet type + style
+      // Store compressed image for saving against NCR on submit
+      window._pendingDoorSheetImage = compressed;
       const typeLabel = parsed.sheet_type==='F'?'Frame':parsed.sheet_type==='S'?'Slave door':parsed.sheet_type==='M'?'Master/single door':null;
       const desc = [parsed.range, typeLabel, parsed.door_style, parsed.cust_door_ref].filter(Boolean).join(' — ');
-      if(desc && document.getElementById('ncrIssue') && !document.getElementById('ncrIssue').value){
-        // Don't overwrite issue — but show in scan status
-      }
       document.getElementById('scanStatus').textContent='✓ Details extracted — check and correct if needed'+(typeLabel?' ('+typeLabel+')':'');
     }catch(e){
       document.getElementById('scanStatus').textContent='⚠️ '+e.message;
@@ -2170,7 +2266,11 @@ function submitNCR(){
     localStorage.setItem('ncr_new',JSON.stringify(saved));
   });
 
-  closeRaiseModal();
+  // Save pending door sheet image if scanned
+  if(window._pendingDoorSheetImage){
+    saveDoorSheetImage(id, window._pendingDoorSheetImage);
+    window._pendingDoorSheetImage = null;
+  }
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
   showView('detail');
