@@ -52,7 +52,8 @@ Return ONLY a valid JSON object in this exact format, no other text:
   "corrective_action": "Specific corrective action to fix the root cause",
   "preventive_action": "What should change to prevent recurrence",
   "machine_related": true,
-  "suggested_task": "Short maintenance task name or null"
+  "suggested_task": "Short maintenance task name or null",
+  "error_type_suggestion": "One of: Human Error, Machine Error, Process Error, Design Error, Supplier Error, System Error"
 }`;
   } else {
     prompt = `You are a manufacturing quality engineer at Solidcor, a fire door manufacturer in the UK.
@@ -75,7 +76,8 @@ Return ONLY a valid JSON object in this exact format, no other text:
   "corrective_action": "Specific corrective action",
   "preventive_action": "What should change to prevent recurrence",
   "machine_related": true,
-  "suggested_task": "Short maintenance task name or null"
+  "suggested_task": "Short maintenance task name or null",
+  "error_type_suggestion": "One of: Human Error, Machine Error, Process Error, Design Error, Supplier Error, System Error"
 }`;
   }
 
