@@ -2938,18 +2938,13 @@ function generateDoorQR(doorRef, soNumber, customerName){
 }
 
 async function downloadDoorQR(doorRef, url){
-  try{
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=20&data=${encodeURIComponent(url)}`;
-    const resp = await fetch(qrUrl);
-    const blob = await resp.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `solidcor-qr-${(doorRef||'door').replace(/[^a-z0-9]/gi,'-')}.png`;
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  }catch(e){
-    showToast('⚠️ Download failed — try right-clicking the QR image to save');
-  }
+  // Open the QR image in a new tab — user can right-click save, or we link directly
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(url)}`;
+  const a = document.createElement('a');
+  a.href = qrUrl;
+  a.target = '_blank';
+  a.download = `solidcor-qr-${(doorRef||'door').replace(/[^a-z0-9]/gi,'-')}.png`;
+  a.click();
 }
 
 // Satisfaction survey portal
