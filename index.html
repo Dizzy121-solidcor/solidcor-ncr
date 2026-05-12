@@ -770,6 +770,13 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div style="max-width:600px">
         <h2 style="font-size:16px;margin-bottom:20px">⚙️ Settings</h2>
 
+        <!-- Normalise customer names -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">🧹 Normalise customer names</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Scans all existing NCRs and groups similar customer names (e.g. "ian williams", "Ian William", "Ian Williams") into a single canonical version. Preview before applying.</div>
+          <button class="top-btn primary" onclick="openNormaliseCustomers()">Run normalisation</button>
+        </div>
+
         <!-- NCR alert notification email -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🔔 NCR alert email</div>
@@ -967,6 +974,20 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
   </div>
 </div>
 
+<!-- CUSTOMER NORMALISE MODAL -->
+<div class="modal-overlay hidden" id="normaliseModal">
+  <div class="modal" style="width:min(680px,96vw);max-height:90vh;display:flex;flex-direction:column">
+    <h3>🧹 Normalise Customer Names</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 14px">Similar names have been grouped below. Edit the canonical name for each group, then click Apply to update all matching records in the database.</p>
+    <div id="normaliseStats" style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap"></div>
+    <div style="overflow-y:auto;flex:1;min-height:0" id="normaliseBody"></div>
+    <div class="modal-actions" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <button class="top-btn ghost" onclick="closeModal('normaliseModal')">Cancel</button>
+      <button class="top-btn primary" id="normaliseApplyBtn" onclick="applyNormalisation()">Apply changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- NCR IMPORT MODAL -->
 <div class="modal-overlay hidden" id="importModal">
   <div class="modal" style="width:min(700px,96vw);max-height:90vh;display:flex;flex-direction:column">
@@ -1063,7 +1084,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
             autocomplete="off" autocorrect="off" spellcheck="false"
             oninput="filterCustomerDrop(this.value)"
             onfocus="filterCustomerDrop(this.value)"
-            onblur="setTimeout(()=>hideCustomerDrop(),200)"
+            onblur="setTimeout(()=>hideCustomerDrop(),200);autoNormaliseCustomer(this)"
             style="width:100%;box-sizing:border-box">
           <div id="customerDrop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--accent);border-top:none;border-radius:0 0 var(--r) var(--r);max-height:200px;overflow-y:auto;z-index:500;box-shadow:0 4px 16px rgba(0,0,0,.25)"></div>
         </div>
@@ -2850,7 +2871,9 @@ async function scanDoorSheet(input){
 }
 
 function submitNCR(){
-  const customer=document.getElementById('ncrCustomer').value.trim();
+  const rawCustomer=document.getElementById('ncrCustomer').value.trim();
+  const _custMatch=findClosestCustomer(rawCustomer);
+  const customer=(_custMatch&&_custMatch.score<0.25)?_custMatch.match:titleCase(rawCustomer);
   const doorRef=document.getElementById('ncrDoorRef').value.trim();
   const issue=document.getElementById('ncrIssue').value.trim();
   const category_raw=document.getElementById('ncrCategory').value;
@@ -2925,8 +2948,163 @@ function submitNCR(){
 
 
 // ═══════════════════════════════════════════════════════════════
-// NCR IMPORT — Excel/CSV with duplicate detection
+// CUSTOMER NAME NORMALISATION — fuzzy match & canonicalise
 // ═══════════════════════════════════════════════════════════════
+
+// Clean a name for comparison: lowercase, trim, collapse spaces, remove punctuation
+function normName(s){
+  return (s||'').toLowerCase().trim().replace(/['\-\.]/g,' ').replace(/\s+/g,' ');
+}
+
+// Title-case a name: "ian williams" → "Ian Williams"
+function titleCase(s){
+  return (s||'').trim().replace(/\w\S*/g,w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());
+}
+
+// Levenshtein distance between two strings
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
+    dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+// Find best matching existing customer, returns {match, score} or null
+// score = 0 (exact) to 1 (totally different). Match if score < 0.3
+function findClosestCustomer(input){
+  const norm = normName(input);
+  if(!norm) return null;
+  const customers = [...new Set(ncrRecords.map(r=>r.customer).filter(Boolean))];
+  let best=null, bestScore=1;
+  for(const c of customers){
+    const cn=normName(c);
+    // Exact normalised match
+    if(cn===norm) return {match:c, score:0};
+    // Levenshtein similarity
+    const maxLen=Math.max(norm.length,cn.length);
+    if(maxLen===0) continue;
+    const score=levenshtein(norm,cn)/maxLen;
+    if(score<bestScore){bestScore=score;best=c;}
+  }
+  return bestScore<0.25 ? {match:best, score:bestScore} : null;
+}
+
+// Called when customer field loses focus — auto-correct close matches
+function autoNormaliseCustomer(inputEl){
+  const val=(inputEl.value||'').trim();
+  if(!val) return;
+  const match=findClosestCustomer(val);
+  if(match && match.score===0){
+    // Exact normalised match — set to canonical version (correct capitalisation)
+    inputEl.value=match.match;
+  } else if(match && match.score>0 && match.score<0.25){
+    // Close match — auto-correct silently and set title case of canonical
+    inputEl.value=match.match;
+    inputEl.style.background='rgba(34,197,94,.08)';
+    inputEl.title='Auto-corrected to: '+match.match;
+    setTimeout(()=>{inputEl.style.background='';inputEl.title='';},3000);
+  } else {
+    // New customer — title case it
+    inputEl.value=titleCase(val);
+  }
+}
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// RETROSPECTIVE CUSTOMER NORMALISATION
+// ═══════════════════════════════════════════════════════════════
+let _normaliseGroups = [];
+
+function openNormaliseCustomers(){
+  const counts = {};
+  ncrRecords.forEach(r=>{ if(r.customer) counts[r.customer]=(counts[r.customer]||0)+1; });
+  const names = Object.keys(counts);
+  if(!names.length){ showToast('No customer records found'); return; }
+
+  const used=new Set(), groups=[];
+  for(const name of names){
+    if(used.has(name)) continue;
+    const group=[name]; used.add(name);
+    for(const other of names){
+      if(used.has(other)) continue;
+      const maxLen=Math.max(normName(name).length,normName(other).length);
+      if(maxLen>0 && levenshtein(normName(name),normName(other))/maxLen<0.25){
+        group.push(other); used.add(other);
+      }
+    }
+    group.sort((a,b)=>(counts[b]||0)-(counts[a]||0));
+    groups.push({canonical:titleCase(group[0]),variants:group,counts});
+  }
+  _normaliseGroups=groups;
+
+  const needsWork=groups.filter(g=>g.variants.length>1||g.canonical!==g.variants[0]);
+  const totalAffected=needsWork.reduce((s,g)=>s+g.variants.reduce((ss,v)=>ss+(g.counts[v]||0),0),0);
+
+  document.getElementById('normaliseStats').innerHTML=`
+    <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);border-radius:var(--r);padding:8px 14px;font-size:13px">
+      <strong style="color:var(--green)">${needsWork.length}</strong><span style="color:var(--muted)"> groups to fix</span>
+    </div>
+    <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:var(--r);padding:8px 14px;font-size:13px">
+      <strong style="color:#60a5fa">${totalAffected}</strong><span style="color:var(--muted)"> records will be updated</span>
+    </div>
+    <div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.2);border-radius:var(--r);padding:8px 14px;font-size:13px">
+      <strong style="color:var(--muted)">${names.length}</strong><span style="color:var(--muted)"> unique names total</span>
+    </div>`;
+
+  const nb=document.getElementById('normaliseBody');
+  if(!needsWork.length){
+    nb.innerHTML='<div style="padding:20px;color:var(--green);font-family:var(--mono);font-size:13px;text-align:center">✓ All customer names are already consistent — nothing to fix.</div>';
+    document.getElementById('normaliseApplyBtn').disabled=true;
+  } else {
+    document.getElementById('normaliseApplyBtn').disabled=false;
+    // Store group index for each input
+    window._ngGroups=needsWork;
+    nb.innerHTML=needsWork.map((g,i)=>`
+      <div style="border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap">Canonical name:</div>
+          <input type="text" value="${esc(g.canonical)}" id="ngc_${i}"
+            style="font-size:14px;font-weight:600;padding:5px 10px;border:1.5px solid var(--accent);border-radius:var(--r);background:var(--surface);color:var(--text);flex:1;min-width:180px">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${g.variants.map(v=>{
+            const same=titleCase(v)===g.canonical;
+            return `<span style="font-size:12px;font-family:var(--mono);padding:3px 9px;border-radius:4px;background:${same?'rgba(34,197,94,.1)':'rgba(239,68,68,.1)'};color:${same?'var(--green)':'var(--red)'};border:1px solid ${same?'rgba(34,197,94,.25)':'rgba(239,68,68,.25)'}"
+              title="${g.counts[v]} NCR${g.counts[v]!==1?'s':''}">${esc(v)} <span style="opacity:.55">(${g.counts[v]})</span></span>`;
+          }).join('')}
+        </div>
+      </div>`).join('');
+  }
+  openModal('normaliseModal');
+}
+
+async function applyNormalisation(){
+  const btn=document.getElementById('normaliseApplyBtn');
+  btn.disabled=true; btn.textContent='Applying…';
+  const groups=window._ngGroups||[];
+  let updated=0,failed=0;
+  for(let i=0;i<groups.length;i++){
+    const g=groups[i];
+    const canonical=(document.getElementById('ngc_'+i)?.value||g.canonical).trim();
+    if(!canonical) continue;
+    const toFix=g.variants.filter(v=>v!==canonical);
+    for(const variant of toFix){
+      const affected=ncrRecords.filter(r=>r.customer===variant);
+      for(const r of affected){
+        try{
+          await sbPatch('ncr_records',r.id,{customer:canonical});
+          r.customer=canonical; updated++;
+        }catch(e){ failed++; }
+      }
+    }
+  }
+  closeModal('normaliseModal');
+  btn.disabled=false; btn.textContent='Apply changes';
+  renderTable('all');renderTable('external');renderTable('internal');
+  renderDashboard();updateBadges();populateCrCustomers();
+  showToast(`✓ Updated ${updated} NCR${updated!==1?'s':''}${failed?` · ${failed} failed`:''}`);
+}
+
 let _importRows = []; // parsed rows ready for preview
 
 function openImportModal(){
@@ -3264,7 +3442,9 @@ function epTypeChange(){
 
 async function submitExtNcrPortal(){
   const err = document.getElementById('ep_err');
-  const company = document.getElementById('ep_company').value.trim();
+  const _rawCompP=document.getElementById('ep_company').value.trim();
+  const _matchP=findClosestCustomer(_rawCompP);
+  const company=(_matchP&&_matchP.score<0.25)?_matchP.match:titleCase(_rawCompP);
   const name    = document.getElementById('ep_name').value.trim();
   const phone   = document.getElementById('ep_phone').value.trim();
   const type    = document.getElementById('ep_type').value;
@@ -3664,7 +3844,9 @@ function extNcrIssueTypeChange(){
 
 async function submitExtNcr(){
   const err=document.getElementById('extNcrErr');
-  const company=document.getElementById('extNcrCompany').value.trim();
+  const rawCompany=document.getElementById('extNcrCompany').value.trim();
+  const _compMatch=findClosestCustomer(rawCompany);
+  const company=(_compMatch&&_compMatch.score<0.25)?_compMatch.match:titleCase(rawCompany);
   const person=document.getElementById('extNcrPersonName').value.trim();
   const phone=document.getElementById('extNcrPhone').value.trim();
   const issueType=document.getElementById('extNcrIssueType').value;
