@@ -241,14 +241,16 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 </div>
 
 <!-- Operator QR modal -->
-<div class="modal-overlay hidden" id="opQrModal">
+<div class="modal-overlay hidden" id="opQrModal" style="z-index:9999">
   <div class="modal" style="width:min(380px,95vw);text-align:center">
-    <h3>📱 Operator Portal</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Scan this QR code to open the red tag reporting form. No login required.</p>
-    <div id="opQrCanvas" style="display:flex;justify-content:center;margin-bottom:16px"></div>
+    <h3>📱 Internal NCR Portal QR</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Staff scan this to raise internal NCRs. No login required.</p>
+    <div id="opQrCanvas" style="display:flex;justify-content:center;margin-bottom:12px"></div>
     <div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;background:var(--surface);border-radius:var(--r);padding:8px 12px;margin-bottom:14px" id="opQrUrl"></div>
-    <div class="modal-actions" style="justify-content:center">
+    <div class="modal-actions" style="justify-content:center;gap:8px">
       <button class="ghost" onclick="closeModal('opQrModal')">Close</button>
+      <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('opQrUrl').textContent).then(()=>showToast('✓ Link copied'))">📋 Copy link</button>
+      <button class="primary" onclick="downloadOpQR()">📥 Download</button>
     </div>
   </div>
 </div>
@@ -1530,28 +1532,19 @@ function showOpQR(){
   const s=loadSettings();
   const url=(s.portal_url||window.location.origin)+'?portal=ncr';
   document.getElementById('opQrUrl').textContent=url;
-  // Canvas QR with logo
   const qrEl=document.getElementById('opQrCanvas');
-  const size=200,logoSize=42;
-  const img=new Image();
-  img.crossOrigin='anonymous';
-  img.onload=()=>{
-    const canvas=document.createElement('canvas');
-    canvas.width=size;canvas.height=size;
-    const ctx=canvas.getContext('2d');
-    ctx.drawImage(img,0,0,size,size);
-    const lx=(size-logoSize)/2,ly=(size-logoSize)/2,r=8;
-    ctx.fillStyle='#fff';
-    ctx.beginPath();ctx.moveTo(lx+r,ly);ctx.lineTo(lx+logoSize-r,ly);ctx.quadraticCurveTo(lx+logoSize,ly,lx+logoSize,ly+r);ctx.lineTo(lx+logoSize,ly+logoSize-r);ctx.quadraticCurveTo(lx+logoSize,ly+logoSize,lx+logoSize-r,ly+logoSize);ctx.lineTo(lx+r,ly+logoSize);ctx.quadraticCurveTo(lx,ly+logoSize,lx,ly+logoSize-r);ctx.lineTo(lx,ly+r);ctx.quadraticCurveTo(lx,ly,lx+r,ly);ctx.closePath();ctx.fill();
-    ctx.fillStyle='#E07B1A';
-    ctx.beginPath();ctx.moveTo(lx+r+2,ly+2);ctx.lineTo(lx+logoSize-r-2,ly+2);ctx.quadraticCurveTo(lx+logoSize-2,ly+2,lx+logoSize-2,ly+r+2);ctx.lineTo(lx+logoSize-2,ly+logoSize-r-2);ctx.quadraticCurveTo(lx+logoSize-2,ly+logoSize-2,lx+logoSize-r-2,ly+logoSize-2);ctx.lineTo(lx+r+2,ly+logoSize-2);ctx.quadraticCurveTo(lx+2,ly+logoSize-2,lx+2,ly+logoSize-r-2);ctx.lineTo(lx+2,ly+r+2);ctx.quadraticCurveTo(lx+2,ly+2,lx+r+2,ly+2);ctx.closePath();ctx.fill();
-    ctx.fillStyle='#fff';ctx.font=`800 ${logoSize*0.62}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('S',size/2,size/2+1);
-    canvas.style.cssText='border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.2)';
-    qrEl.innerHTML='';qrEl.appendChild(canvas);
-  };
-  img.onerror=()=>{ qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(url)}" style="border-radius:8px">`; };
-  img.src=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(url)}`;
+  qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${encodeURIComponent(url)}"
+    style="border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.3);width:220px;height:220px">`;
   openModal('opQrModal');
+}
+
+function downloadOpQR(){
+  const url=document.getElementById('opQrUrl').textContent||'';
+  const a=document.createElement('a');
+  a.href=`https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(url)}`;
+  a.target='_blank';
+  a.download='solidcor-internal-ncr-qr.png';
+  a.click();
 }
 
 // Update user management to use email+password
