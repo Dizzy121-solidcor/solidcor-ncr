@@ -770,6 +770,14 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div style="max-width:600px">
         <h2 style="font-size:16px;margin-bottom:20px">⚙️ Settings</h2>
 
+        <!-- NCR alert notification email -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">🔔 NCR alert email</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to notify every time any NCR is raised (internal or external). Separate multiple addresses with commas.</div>
+          <input type="email" id="notify_email" placeholder="manager@solidcor.co.uk, quality@solidcor.co.uk"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box">
+        </div>
+
         <!-- Component picker -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🧩 Component picker</div>
@@ -2899,6 +2907,8 @@ function submitNCR(){
 
   // Send customer submission email if email provided
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
+  // Send NCR alert to notification email
+  sendNcrAlertEmail(newNCR);
 
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
@@ -3312,6 +3322,7 @@ async function submitExtNcrPortal(){
   }
 
   // Show success
+  sendNcrAlertEmail(rec);
   document.getElementById('extNcrPortalWrap').innerHTML=`
   <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px">
     <div style="background:#161920;border:1px solid #2a2e38;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:100%">
@@ -3685,6 +3696,7 @@ async function submitExtNcr(){
   ncrRecords.unshift(newNCR);
   await sbUps('ncr_records',newNCR).catch(()=>{});
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
+  sendNcrAlertEmail(newNCR);
   closeModal('extNcrModal');
   showToast(`✓ External NCR submitted — ${id}`);
   renderTable('all');renderTable('external');renderDashboard();updateBadges();
@@ -4197,6 +4209,7 @@ function saveSettings(){
     email_inspect:document.getElementById('email_inspect').value.trim(),
     portal_url:document.getElementById('portal_url').value.trim().replace(/\/$/,''),
     picker_email:document.getElementById('picker_email').value.trim(),
+    notify_email:document.getElementById('notify_email').value.trim(),
     sla_external:parseInt(document.getElementById('sla_external').value)||5,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
@@ -4210,7 +4223,7 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','sla_external','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','sla_external','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
@@ -4218,6 +4231,33 @@ function populateSettings(){
 // ═══════════════════════════════════════════════════════
 // EMAIL via EmailJS
 // ═══════════════════════════════════════════════════════
+async function sendNcrAlertEmail(ncr){
+  const s=loadSettings();
+  if(!s.notify_email) return;
+  const typeLabel=ncr.type==='external'?'🌐 External':'🏭 Internal';
+  const sourceLabel=ncr.source==='external_portal'?' (via customer portal)':ncr.source==='external_form'?' (via ext. NCR form)':'';
+  const html=`<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid ${ncr.type==='external'?'#3b82f6':'#f97316'}">
+    <div style="background:#111316;padding:14px 20px;display:flex;align-items:center;gap:10px">
+      <span style="color:#E07B1A;font-weight:800;font-size:17px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px">NCR Alert${sourceLabel}</span>
+    </div>
+    <div style="padding:20px 24px">
+      <h2 style="font-size:17px;margin:0 0 14px;color:#111316">${typeLabel} NCR Raised — <span style="font-family:monospace;color:#E07B1A">${ncr.id}</span></h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:140px">Date raised</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Customer</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.customer||'—'}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Raised by</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.raised_by||'—'}${ncr.contact_phone?' · '+ncr.contact_phone:''}</td></tr>
+        ${ncr.so?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Sales order</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.so}</td></tr>`:''}
+        ${ncr.door_ref?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Door ref</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>`:''}
+        ${ncr.ncr_type?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Type</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.ncr_type}</td></tr>`:''}
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Issue</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.issue||'—'}</td></tr>
+        ${ncr.dept?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Department</td><td style="padding:6px 10px">${ncr.dept}</td></tr>`:''}
+      </table>
+    </div>
+    <div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor NCR Hub · Automated alert</div>
+  </div>`;
+  await sendNcrEmail(s.notify_email, `[NCR Alert] ${typeLabel} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`, html);
+}
 async function sendNcrEmail(toEmails,subject,bodyHtml){
   const s=loadSettings();
   if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey)return false;
