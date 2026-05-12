@@ -109,6 +109,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 /* ── Modal ────────────────────────────────────────── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
 .modal-overlay.hidden{display:none}
+.form-row.hidden{display:none!important}
 .modal{background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-height:90vh;overflow-y:auto;width:min(560px,95vw)}
 .modal h3{font-family:var(--head);font-size:18px;font-weight:700;margin-bottom:16px;color:var(--text)}
 .form-row{margin-bottom:12px}
@@ -286,6 +287,24 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div class="sb-icon">↩️</div><span>Returns Log</span>
       </div>
       <div class="sb-section">Raise</div>
+      <div class="sb-item" onclick="showView('reports')" id="nav-reports">
+        <div class="sb-icon">📊</div><span>Reports</span>
+      </div>
+      <div class="sb-item" onclick="showView('customerreport')" id="nav-customerreport">
+        <div class="sb-icon">👤</div><span>Customer Report</span>
+      </div>
+      <div class="sb-item" onclick="showView('reports')" id="nav-reports">
+        <div class="sb-icon">📊</div><span>Reports</span>
+      </div>
+      <div class="sb-item" onclick="showView('customerreport')" id="nav-customerreport">
+        <div class="sb-icon">👤</div><span>Customer Report</span>
+      </div>
+      <div class="sb-item" onclick="showExtNcrQR()" id="nav-extncrqr">
+        <div class="sb-icon">🔲</div><span>Ext. NCR QR</span>
+      </div>
+      <div class="sb-item" onclick="openExtNcrModal()" id="nav-extncrform">
+        <div class="sb-icon">📋</div><span>Ext. NCR Form</span>
+      </div>
       <div class="sb-item" onclick="openRaiseNCR()" id="nav-raise">
         <div class="sb-icon">🔴</div><span>Raise NCR</span>
       </div>
@@ -385,6 +404,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <h4>Error type breakdown</h4>
           <div class="bar-chart" id="errorTypeChart"></div>
         </div>
+      </div>
+
+      <!-- Daily summary -->
+      <div class="detail-card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h4 style="margin:0">📅 Yesterday's summary</h4>
+          <button class="top-btn ghost" style="font-size:11px" onclick="exportDailySummary()">⬇ Export daily sheet</button>
+        </div>
+        <div id="dashDailySummary"></div>
       </div>
 
       <div class="detail-card" style="margin-top:14px">
@@ -495,6 +523,90 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <button class="top-btn primary" onclick="openAddReturn()">+ Log return</button>
       </div>
       <div id="returnsList" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ REPORTS VIEW -->
+    <div class="view" id="view-reports">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px;margin-bottom:4px">
+        <select id="rptPeriod" onchange="renderReports()">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last 12 months</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom range</option>
+        </select>
+        <input type="date" id="rptFrom" onchange="renderReports()" style="display:none">
+        <input type="date" id="rptTo" onchange="renderReports()" style="display:none">
+        <button class="top-btn ghost" onclick="exportReportCSV()" style="margin-left:auto">⬇ Export CSV</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px" id="rptStatCards"></div>
+
+      <!-- Daily summary -->
+      <div class="detail-card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h4 style="margin:0">📅 Yesterday's summary</h4>
+          <button class="top-btn ghost" style="font-size:11px" onclick="exportDailySummary()">⬇ Daily sheet</button>
+        </div>
+        <div id="rptDailyPanel"></div>
+      </div>
+
+      <!-- Trend + dept -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="detail-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h4 style="margin:0">NCR trend</h4>
+            <div style="display:flex;gap:4px">
+              <button class="top-btn ghost" style="font-size:10px;padding:2px 8px" id="rptBtnDay" onclick="setRptGroup('day')">Day</button>
+              <button class="top-btn primary" style="font-size:10px;padding:2px 8px" id="rptBtnWeek" onclick="setRptGroup('week')">Week</button>
+              <button class="top-btn ghost" style="font-size:10px;padding:2px 8px" id="rptBtnMonth" onclick="setRptGroup('month')">Month</button>
+            </div>
+          </div>
+          <div class="bar-chart" id="rptTrendChart"></div>
+        </div>
+        <div class="detail-card">
+          <h4>By department / area</h4>
+          <div class="bar-chart" id="rptDeptChart"></div>
+        </div>
+      </div>
+
+      <!-- Operator + error type -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="detail-card">
+          <h4>By operator (raised by)</h4>
+          <div class="bar-chart" id="rptOperatorChart"></div>
+        </div>
+        <div class="detail-card">
+          <h4>By error type</h4>
+          <div class="bar-chart" id="rptErrorTypeRpt"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════ CUSTOMER REPORT VIEW -->
+    <div class="view" id="view-customerreport">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px;margin-bottom:4px">
+        <select id="crCustomer" onchange="renderCustomerReport()" style="min-width:200px">
+          <option value="">— select customer —</option>
+        </select>
+        <select id="crPeriod" onchange="crPeriodChange()">
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last 12 months</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom range</option>
+        </select>
+        <input type="date" id="crFrom" onchange="renderCustomerReport()" style="display:none">
+        <input type="date" id="crTo" onchange="renderCustomerReport()" style="display:none">
+        <input type="number" id="crDoorsSupplied" placeholder="Doors supplied in period" min="0"
+          style="width:180px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px"
+          oninput="renderCustomerReport()" title="Enter total doors supplied to recalculate FTR %">
+        <button class="top-btn ghost" onclick="exportCustomerReport()" style="margin-left:auto">⬇ Export report</button>
+      </div>
+      <div id="crBody" style="margin-top:14px">
+        <div style="color:var(--faint);font-size:13px;font-family:var(--mono);padding:20px 0">Select a customer to generate their report.</div>
+      </div>
     </div>
 
     <!-- COMPONENTS & COSTS -->
@@ -790,6 +902,66 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
     </div>
+
+<!-- EXTERNAL NCR FORM MODAL -->
+<div class="modal-overlay hidden" id="extNcrModal">
+  <div class="modal" style="width:min(580px,96vw);max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div style="background:var(--accent);border-radius:var(--r);padding:8px 12px;font-weight:800;font-family:var(--mono);font-size:13px;color:#fff">SOLIDCOR</div>
+      <div>
+        <h3 style="margin:0;font-size:16px">External NCR Report</h3>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">Customer submission form</div>
+      </div>
+    </div>
+
+    <div class="form-row"><label>Customer company name <span class="req-star">*</span></label>
+      <input type="text" id="extNcrCompany" placeholder="Company name" autocomplete="organization">
+    </div>
+    <div class="form-cols">
+      <div class="form-row"><label>Name of person raising NCR <span class="req-star">*</span></label>
+        <input type="text" id="extNcrPersonName" placeholder="Full name" autocomplete="name">
+      </div>
+      <div class="form-row"><label>Contact number <span class="req-star">*</span></label>
+        <input type="tel" id="extNcrPhone" placeholder="Phone number" autocomplete="tel">
+      </div>
+    </div>
+    <div class="form-cols">
+      <div class="form-row"><label>Date &amp; time raised</label>
+        <input type="datetime-local" id="extNcrDatetime" readonly style="background:var(--faint);color:var(--muted)">
+      </div>
+      <div class="form-row"><label>Project / contract reference</label>
+        <input type="text" id="extNcrProject" placeholder="Project or contract ref">
+      </div>
+    </div>
+    <div class="form-row"><label>Sales order number</label>
+      <input type="text" id="extNcrSO" placeholder="SO number (if known)">
+    </div>
+    <div class="form-row"><label>Type of issue <span class="req-star">*</span></label>
+      <select id="extNcrIssueType" onchange="extNcrIssueTypeChange()">
+        <option value="">— select type —</option>
+        <option value="Doorset">Doorset</option>
+        <option value="Window">Window</option>
+        <option value="Components">Components</option>
+        <option value="Delivery">Delivery</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-row hidden" id="extNcrDoorRow"><label id="extNcrDoorLabel">Door / window number <span class="req-star">*</span></label>
+      <input type="text" id="extNcrDoorNumber" placeholder="e.g. 7686-0001S">
+    </div>
+    <div class="form-row"><label>Description of fault <span class="req-star">*</span></label>
+      <textarea id="extNcrFaultDesc" rows="4" placeholder="Please describe the fault or issue in as much detail as possible…" autocapitalize="sentences"></textarea>
+    </div>
+    <div class="form-row"><label>Customer email <span style="color:var(--muted);font-weight:400">(for updates)</span></label>
+      <input type="email" id="extNcrEmail" placeholder="email@company.com" autocomplete="email">
+    </div>
+    <div id="extNcrErr" style="color:var(--red);font-size:12px;font-family:var(--mono);min-height:16px;margin-bottom:8px"></div>
+    <div class="modal-actions">
+      <button class="top-btn ghost" onclick="closeModal('extNcrModal')">Cancel</button>
+      <button class="top-btn primary" onclick="submitExtNcr()">Submit NCR</button>
+    </div>
+  </div>
+</div>
 
 <!-- NCR IMPORT MODAL -->
 <div class="modal-overlay hidden" id="importModal">
@@ -1719,6 +1891,8 @@ function showView(v){
   if(v==='portalconfig') renderPortalConfig();
   if(v==='users') renderUsersList();
   if(v==='actions') setTimeout(checkOverdueNcrs, 100);
+  if(v==='reports'){ setTimeout(()=>{renderReports();renderDailyPanel('rptDailyPanel');},50); }
+  if(v==='customerreport'){ populateCrCustomers(); }
 }
 function goBack(){ showView(lastView); }
 
@@ -1816,6 +1990,8 @@ function renderDashboard(){
       <div class="stat-sub">excl. legacy</div>
     </div>
   `;
+
+  renderDailyPanel('dashDailySummary');
 
   // ── External panel ────────────────────────────────
   const extOpen30 = external.filter(r=>r.status==='open'&&r.date>=new Date(Date.now()-30*86400000).toISOString().slice(0,10)).length;
@@ -2992,7 +3168,542 @@ async function confirmImport(){
   renderDashboard(); updateBadges();
   showToast(`✓ Imported ${ok} NCR${ok!==1?'s':''}${fail?` · ${fail} failed`:''}`);
 }
+
 // ═══════════════════════════════════════════════════════════════
+// EXTERNAL NCR PUBLIC PORTAL (?portal=extncrform)
+// ═══════════════════════════════════════════════════════════════
+function showExtNcrPortal(){
+  const wrap = document.createElement('div');
+  wrap.id = 'extNcrPortalWrap';
+  wrap.innerHTML = `
+  <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <div style="background:#111316;border-bottom:3px solid #E07B1A;padding:14px 20px;display:flex;align-items:center;gap:12px">
+      <span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace;letter-spacing:.03em">SOLIDCOR</span>
+      <span style="color:#7a7e8a;font-size:12px">External NCR Report</span>
+    </div>
+    <div style="max-width:520px;margin:0 auto;padding:20px 16px">
+      <div style="background:#161920;border:1px solid #2a2e38;border-radius:12px;padding:20px;margin-bottom:16px">
+        <h2 style="color:#e8eaf0;font-size:16px;margin:0 0 6px">Submit a Non-Conformance Report</h2>
+        <p style="color:#7a7e8a;font-size:13px;margin:0">Please complete all required fields. We'll be in touch within 5 working days.</p>
+      </div>
+
+      <div style="background:#161920;border:1px solid #2a2e38;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px">
+
+        <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Customer company name <span style="color:#ef4444">*</span></label>
+          <input id="ep_company" type="text" autocomplete="organization" placeholder="Your company name"
+            style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Your name <span style="color:#ef4444">*</span></label>
+            <input id="ep_name" type="text" autocomplete="name" placeholder="Full name"
+              style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+          <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Contact number <span style="color:#ef4444">*</span></label>
+            <input id="ep_phone" type="tel" autocomplete="tel" placeholder="Phone number"
+              style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+        </div>
+
+        <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Date &amp; time raised</label>
+          <input id="ep_datetime" type="datetime-local" readonly
+            style="width:100%;padding:10px 12px;background:#111316;border:1px solid #2a2e38;border-radius:8px;color:#7a7e8a;font-size:13px;box-sizing:border-box"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Project / contract reference</label>
+            <input id="ep_project" type="text" placeholder="Project ref"
+              style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+          <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Sales order number</label>
+            <input id="ep_so" type="text" placeholder="SO number"
+              style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+        </div>
+
+        <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Type of issue <span style="color:#ef4444">*</span></label>
+          <select id="ep_type" onchange="epTypeChange()"
+            style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box">
+            <option value="">— select —</option>
+            <option value="Doorset">Doorset</option>
+            <option value="Window">Window</option>
+            <option value="Components">Components</option>
+            <option value="Delivery">Delivery</option>
+            <option value="Other">Other</option>
+          </select></div>
+
+        <div id="ep_doorRow" style="display:none">
+          <label id="ep_doorLabel" style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Door / window number <span style="color:#ef4444">*</span></label>
+          <input id="ep_door" type="text" placeholder="e.g. 7686-0001S"
+            style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+
+        <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Description of fault <span style="color:#ef4444">*</span></label>
+          <textarea id="ep_fault" rows="4" placeholder="Please describe the fault in as much detail as possible…"
+            style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea></div>
+
+        <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Email address <span style="color:#7a7e8a;font-weight:400;text-transform:none">(for updates)</span></label>
+          <input id="ep_email" type="email" autocomplete="email" placeholder="your@email.com"
+            style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
+
+        <div id="ep_err" style="color:#ef4444;font-size:12px;font-family:monospace;min-height:14px"></div>
+
+        <button onclick="submitExtNcrPortal()"
+          style="width:100%;padding:13px;background:#E07B1A;border:none;border-radius:8px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.02em">
+          Submit NCR →
+        </button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(wrap);
+
+  // Auto-fill datetime
+  const now = new Date();
+  const local = new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('ep_datetime').value = local;
+}
+
+function epTypeChange(){
+  const val = document.getElementById('ep_type').value;
+  const row = document.getElementById('ep_doorRow');
+  const lbl = document.getElementById('ep_doorLabel');
+  const show = val==='Doorset'||val==='Window';
+  row.style.display = show ? 'block' : 'none';
+  if(lbl) lbl.innerHTML = (val==='Window'?'Window number':'Door / slab number')+' <span style="color:#ef4444">*</span>';
+}
+
+async function submitExtNcrPortal(){
+  const err = document.getElementById('ep_err');
+  const company = document.getElementById('ep_company').value.trim();
+  const name    = document.getElementById('ep_name').value.trim();
+  const phone   = document.getElementById('ep_phone').value.trim();
+  const type    = document.getElementById('ep_type').value;
+  const door    = document.getElementById('ep_door').value.trim();
+  const fault   = document.getElementById('ep_fault').value.trim();
+  const needsDoor = type==='Doorset'||type==='Window';
+
+  if(!company){err.textContent='⚠️ Customer company name is required';return;}
+  if(!name){err.textContent='⚠️ Your name is required';return;}
+  if(!phone){err.textContent='⚠️ Contact number is required';return;}
+  if(!type){err.textContent='⚠️ Please select the type of issue';return;}
+  if(needsDoor&&!door){err.textContent='⚠️ Door/window number is required';return;}
+  if(!fault){err.textContent='⚠️ Please describe the fault';return;}
+
+  const btn = document.querySelector('#extNcrPortalWrap button[onclick]');
+  if(btn){btn.disabled=true;btn.textContent='Submitting…';}
+  err.textContent='';
+
+  const now = new Date().toISOString().slice(0,10);
+  const id  = 'EXT-'+now.replace(/-/g,'').slice(2)+'-'+Math.floor(Math.random()*9000+1000);
+  const rec = {
+    id, date:now,
+    customer:company, raised_by:name,
+    contact_phone:phone,
+    so:document.getElementById('ep_so').value.trim(),
+    project_ref:document.getElementById('ep_project').value.trim(),
+    door_ref:door, ncr_type:type, issue:fault,
+    customer_email:document.getElementById('ep_email').value.trim(),
+    type:'external', status:'open', category:type,
+    dept:'External', cost:0, transport:0,
+    root_cause:'', corrective:'', completed:null,
+    legacy:false, error_type:null,
+    raised_datetime:document.getElementById('ep_datetime').value,
+    source:'external_portal'
+  };
+
+  // Save to Supabase directly (no auth needed — anon key allows insert)
+  try{
+    const r = await fetch(SURL+'/rest/v1/ncr_records',{
+      method:'POST',
+      headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify(rec)
+    });
+    if(!r.ok){
+      const t=await r.text();
+      err.textContent='⚠️ Submission failed — please try again or call us directly';
+      if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
+      console.error(t);
+      return;
+    }
+  }catch(e){
+    err.textContent='⚠️ Could not connect — check your internet and try again';
+    if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
+    return;
+  }
+
+  // Show success
+  document.getElementById('extNcrPortalWrap').innerHTML=`
+  <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#161920;border:1px solid #2a2e38;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:100%">
+      <div style="font-size:48px;margin-bottom:16px">✅</div>
+      <h2 style="color:#e8eaf0;font-size:20px;margin:0 0 10px">NCR Submitted</h2>
+      <p style="color:#7a7e8a;font-size:14px;margin:0 0 16px">Your reference number is:</p>
+      <div style="font-family:monospace;font-size:22px;font-weight:800;color:#E07B1A;background:#111316;border-radius:8px;padding:12px 20px;margin-bottom:16px">${id}</div>
+      <p style="color:#7a7e8a;font-size:13px;margin:0">Please keep this reference number. Our quality team will be in touch within 5 working days.</p>
+      ${rec.customer_email?`<p style="color:#7a7e8a;font-size:12px;margin-top:10px">A confirmation will be sent to ${rec.customer_email}</p>`:''}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXTERNAL NCR QR CODE
+// ═══════════════════════════════════════════════════════════════
+function showExtNcrQR(){
+  const s = loadSettings();
+  const url = (s.portal_url||window.location.origin)+'?portal=extncrform';
+  const modal = document.createElement('div');
+  modal.className='modal-overlay';
+  modal.innerHTML=`
+    <div class="modal" style="width:min(420px,95vw);text-align:center">
+      <h3>📋 External NCR Form QR Code</h3>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Share this QR code with customers so they can submit external NCRs directly from their phone.</p>
+      <div style="background:#fff;border-radius:12px;padding:16px;display:inline-block;margin-bottom:14px">
+        <img id="extNcrQrImg" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(url)}"
+          style="display:block;width:220px;height:220px;border-radius:6px">
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);word-break:break-all;background:var(--surface);border-radius:var(--r);padding:8px 12px;margin-bottom:14px">${url}</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="top-btn ghost" onclick="this.closest('.modal-overlay').classList.remove('open');setTimeout(()=>this.closest('.modal-overlay').remove(),200)">Close</button>
+        <button class="top-btn ghost" onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('✓ Link copied'))">📋 Copy link</button>
+        <button class="top-btn primary" onclick="downloadExtNcrQR('${url}')">📥 Download QR</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('open'));
+  modal.addEventListener('click',e=>{if(e.target===modal){modal.classList.remove('open');setTimeout(()=>modal.remove(),200);}});
+}
+
+function downloadExtNcrQR(url){
+  const a=document.createElement('a');
+  a.href=`https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(url)}`;
+  a.target='_blank';
+  a.download='solidcor-external-ncr-qr.png';
+  a.click();
+}
+// ═══════════════════════════════════════════════════════════════
+let _rptGroup='week';
+function setRptGroup(g){
+  _rptGroup=g;
+  ['day','week','month'].forEach(x=>{
+    const b=document.getElementById('rptBtn'+x[0].toUpperCase()+x.slice(1));
+    if(b){b.className=x===g?'top-btn primary':'top-btn ghost';b.style.fontSize='10px';b.style.padding='2px 8px';}
+  });
+  renderReports();
+}
+
+function rptDateRange(){
+  const p=document.getElementById('rptPeriod')?.value||'30';
+  const from=document.getElementById('rptFrom'),to=document.getElementById('rptTo');
+  if(from)from.style.display=p==='custom'?'block':'none';
+  if(to)to.style.display=p==='custom'?'block':'none';
+  if(p==='custom') return {from:from?.value||'1970-01-01',to:to?.value||new Date().toISOString().slice(0,10)};
+  if(p==='all') return {from:'1970-01-01',to:'9999-12-31'};
+  const d=new Date();d.setDate(d.getDate()-parseInt(p));
+  return {from:d.toISOString().slice(0,10),to:new Date().toISOString().slice(0,10)};
+}
+
+function filterByDateRange(records,range){
+  return records.filter(r=>r.date&&r.date>=range.from&&r.date<=range.to);
+}
+
+function renderReports(){
+  const range=rptDateRange();
+  const filtered=filterByDateRange(ncrRecords.filter(r=>!r.legacy),range);
+  const ext=filtered.filter(r=>r.type==='external');
+  const int=filtered.filter(r=>r.type==='internal');
+  const cost=filtered.reduce((s,r)=>s+(r.cost||0),0);
+  const sc=document.getElementById('rptStatCards');
+  if(sc)sc.innerHTML=`
+    <div class="stat-card red"><div class="stat-val">${ext.length}</div><div class="stat-label">External NCRs</div></div>
+    <div class="stat-card amber"><div class="stat-val">${int.length}</div><div class="stat-label">Internal NCRs</div></div>
+    <div class="stat-card green"><div class="stat-val">${filtered.filter(r=>r.status==='closed').length}</div><div class="stat-label">Closed</div></div>
+    <div class="stat-card"><div class="stat-val">£${cost.toLocaleString('en-GB',{maximumFractionDigits:0})}</div><div class="stat-label">Cost impact</div></div>`;
+  // Trend
+  const bkts={};
+  filtered.forEach(r=>{
+    const k=rptBucketKey(r.date,_rptGroup);
+    if(!bkts[k])bkts[k]={ext:0,int:0};
+    if(r.type==='external')bkts[k].ext++;else bkts[k].int++;
+  });
+  const ks=Object.keys(bkts).sort().slice(-20);
+  const mx=Math.max(1,...ks.map(k=>bkts[k].ext+bkts[k].int));
+  const tc=document.getElementById('rptTrendChart');
+  if(tc)tc.innerHTML=ks.map(k=>`<div class="bar-row">
+    <div class="bar-label">${k}</div>
+    <div class="bar-track" style="position:relative;background:var(--surface)">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${bkts[k].ext/mx*100}%;background:#3b82f6;border-radius:3px 0 0 3px"></div>
+      <div style="position:absolute;left:${bkts[k].ext/mx*100}%;top:0;bottom:0;width:${bkts[k].int/mx*100}%;background:#f97316"></div>
+    </div>
+    <div class="bar-val">${bkts[k].ext+bkts[k].int}</div>
+  </div>`).join('')+`<div style="display:flex;gap:12px;margin-top:6px;font-size:11px;font-family:var(--mono)">
+    <span><span style="color:#3b82f6">■</span> Ext</span><span><span style="color:#f97316">■</span> Int</span></div>`;
+  // Dept
+  const dc={};filtered.forEach(r=>{if(r.dept)dc[r.dept]=(dc[r.dept]||0)+1;});
+  renderBarChart('rptDeptChart',dc,'#a855f7',8);
+  // Operator
+  const oc={};filtered.forEach(r=>{const op=r.raised_by||r.raisedBy||'Unknown';oc[op]=(oc[op]||0)+1;});
+  renderBarChart('rptOperatorChart',oc,'#22c55e',10);
+  // Error type
+  const ec={};filtered.forEach(r=>{if(r.error_type)ec[r.error_type]=(ec[r.error_type]||0)+1;});
+  const etEl=document.getElementById('rptErrorTypeRpt');
+  if(etEl){
+    const et=Object.entries(ec).sort((a,b)=>b[1]-a[1]);
+    const em=et[0]?et[0][1]:1;
+    etEl.innerHTML=et.map(([e,n])=>{
+      const c=ERROR_TYPE_COLOURS[e]||{color:'#6b7280'};
+      return `<div class="bar-row"><div class="bar-label">${e.replace(' Error','')}</div><div class="bar-track"><div class="bar-fill" style="width:${n/em*100}%;background:${c.color}"></div></div><div class="bar-val">${n}</div></div>`;
+    }).join('')||'<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No error types set yet</div>';
+  }
+  renderDailyPanel('rptDailyPanel');
+}
+
+function rptBucketKey(d,g){
+  if(!d)return'?';const dt=new Date(d+'T12:00:00');
+  if(g==='day')return d;
+  if(g==='month')return dt.toLocaleString('en-GB',{month:'short',year:'2-digit'});
+  return`W${Math.ceil(dt.getDate()/7)} ${dt.toLocaleString('en-GB',{month:'short'})}`;
+}
+
+function renderBarChart(elId,countObj,colour,limit=8){
+  const el=document.getElementById(elId);if(!el)return;
+  const top=Object.entries(countObj).sort((a,b)=>b[1]-a[1]).slice(0,limit);
+  const mx=top[0]?top[0][1]:1;
+  el.innerHTML=top.map(([k,n])=>`<div class="bar-row">
+    <div class="bar-label" title="${esc(k)}">${esc(k)}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${n/mx*100}%;background:${colour}"></div></div>
+    <div class="bar-val">${n}</div>
+  </div>`).join('')||'<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No data</div>';
+}
+
+function exportReportCSV(){
+  const range=rptDateRange();
+  const filtered=filterByDateRange(ncrRecords,range);
+  const h=['NCR ID','Type','Date','Customer','SO','Door Ref','Category','Dept','Raised By','Error Type','Status','Cost','Issue','Root Cause','Corrective'];
+  const rows=filtered.map(r=>[r.id,r.type,r.date,r.customer,r.so||'',r.door_ref||'',r.category||'',r.dept||'',r.raised_by||'',r.error_type||'',r.status,r.cost||0,(r.issue||'').replace(/"/g,"'"),(r.root_cause||'').replace(/"/g,"'"),(r.corrective||'').replace(/"/g,"'")]);
+  const csv=h.map(x=>`"${x}"`).join(',')+'\n'+rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`ncr-report-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  showToast('✓ Report exported');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DAILY SUMMARY
+// ═══════════════════════════════════════════════════════════════
+function renderDailyPanel(elId){
+  const el=document.getElementById(elId);if(!el)return;
+  const yd=new Date();yd.setDate(yd.getDate()-1);
+  const ydS=yd.toISOString().slice(0,10);
+  const tdS=new Date().toISOString().slice(0,10);
+  const ydN=ncrRecords.filter(r=>r.date===ydS);
+  const tdN=ncrRecords.filter(r=>r.date===tdS);
+  const ydE=ydN.filter(r=>r.type==='external').length;
+  const ydI=ydN.filter(r=>r.type==='internal').length;
+  const ydC=ydN.reduce((s,r)=>s+(r.cost||0),0);
+  const tdE=tdN.filter(r=>r.type==='external').length;
+  const tdI=tdN.filter(r=>r.type==='internal').length;
+  el.innerHTML=`<div style="display:grid;grid-template-columns:auto auto 1fr;gap:16px;align-items:start;flex-wrap:wrap">
+    <div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:6px">Yesterday — ${ydS}</div>
+      <div style="display:flex;gap:8px">
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:var(--r);padding:8px 14px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--red)">${ydE}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">External</div>
+        </div>
+        <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:var(--r);padding:8px 14px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--amber)">${ydI}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Internal</div>
+        </div>
+        <div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.2);border-radius:var(--r);padding:8px 14px;text-align:center">
+          <div style="font-size:16px;font-weight:800;color:var(--text)">£${ydC.toFixed(0)}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Cost</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:6px">Today — ${tdS}</div>
+      <div style="display:flex;gap:8px">
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:var(--r);padding:8px 14px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--red)">${tdE}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">External</div>
+        </div>
+        <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:var(--r);padding:8px 14px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--amber)">${tdI}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Internal</div>
+        </div>
+      </div>
+    </div>
+    ${ydN.length?`<div>
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:6px">Yesterday's NCRs</div>
+      ${ydN.slice(0,5).map(r=>`<div style="font-size:11px;font-family:var(--mono);padding:2px 0"><span style="color:var(--accent)">${esc(r.id)}</span> <span style="color:var(--muted)">${esc(r.customer)}</span> — ${esc((r.issue||'').slice(0,45))}</div>`).join('')}
+      ${ydN.length>5?`<div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:3px">+${ydN.length-5} more</div>`:''}
+    </div>`:'<div style="font-size:12px;color:var(--faint);font-family:var(--mono);padding-top:20px">No NCRs raised yesterday ✓</div>'}
+  </div>`;
+}
+
+function exportDailySummary(){
+  const yd=new Date();yd.setDate(yd.getDate()-1);
+  const ydS=yd.toISOString().slice(0,10);
+  const ydN=ncrRecords.filter(r=>r.date===ydS);
+  const csv=`Solidcor Daily NCR Summary — ${ydS}\n\nExternal NCRs,${ydN.filter(r=>r.type==='external').length}\nInternal NCRs,${ydN.filter(r=>r.type==='internal').length}\nTotal cost,£${ydN.reduce((s,r)=>s+(r.cost||0),0).toFixed(2)}\n\nNCR ID,Type,Customer,Dept,Issue,Cost\n`+
+    ydN.map(r=>`"${r.id}","${r.type}","${r.customer}","${r.dept||''}","${(r.issue||'').replace(/"/g,"'")}","£${r.cost||0}"`).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`daily-summary-${ydS}.csv`;a.click();
+  showToast('✓ Daily summary exported');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOMER REPORT
+// ═══════════════════════════════════════════════════════════════
+function populateCrCustomers(){
+  const sel=document.getElementById('crCustomer');if(!sel)return;
+  const prev=sel.value;
+  const customers=[...new Set(ncrRecords.map(r=>r.customer).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">— select customer —</option>'+
+    customers.map(c=>`<option value="${esc(c)}"${c===prev?' selected':''}>${esc(c)}</option>`).join('');
+  if(prev) renderCustomerReport();
+}
+
+function crPeriodChange(){
+  const p=document.getElementById('crPeriod')?.value;
+  document.getElementById('crFrom').style.display=p==='custom'?'block':'none';
+  document.getElementById('crTo').style.display=p==='custom'?'block':'none';
+  renderCustomerReport();
+}
+
+function crDateRange(){
+  const p=document.getElementById('crPeriod')?.value||'90';
+  if(p==='custom')return{from:document.getElementById('crFrom')?.value||'1970-01-01',to:document.getElementById('crTo')?.value||'9999-12-31'};
+  if(p==='all')return{from:'1970-01-01',to:'9999-12-31'};
+  const d=new Date();d.setDate(d.getDate()-parseInt(p));
+  return{from:d.toISOString().slice(0,10),to:new Date().toISOString().slice(0,10)};
+}
+
+function renderCustomerReport(){
+  const customer=document.getElementById('crCustomer')?.value;
+  const body=document.getElementById('crBody');if(!body)return;
+  if(!customer){body.innerHTML='<div style="color:var(--faint);font-size:13px;font-family:var(--mono);padding:20px 0">Select a customer to generate their report.</div>';return;}
+  const range=crDateRange();
+  const ncrs=ncrRecords.filter(r=>r.customer===customer&&r.date>=range.from&&r.date<=range.to);
+  const doorsSupplied=parseInt(document.getElementById('crDoorsSupplied')?.value)||0;
+  const ftrPct=doorsSupplied>0?Math.max(0,Math.round((doorsSupplied-ncrs.length)/doorsSupplied*100)):null;
+  // Recurring issues
+  const catC={};ncrs.forEach(r=>{if(r.category)catC[r.category]=(catC[r.category]||0)+1;});
+  const recurring=Object.entries(catC).filter(([,n])=>n>1).sort((a,b)=>b[1]-a[1]);
+  body.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="stat-card red"><div class="stat-val">${ncrs.length}</div><div class="stat-label">Total NCRs</div><div class="stat-sub">${range.from.slice(0,7)} to ${range.to.slice(0,7)}</div></div>
+      <div class="stat-card green"><div class="stat-val">${ncrs.filter(r=>r.status==='closed').length}</div><div class="stat-label">Resolved</div></div>
+      <div class="stat-card amber"><div class="stat-val">£${ncrs.reduce((s,r)=>s+(r.cost||0),0).toLocaleString('en-GB',{maximumFractionDigits:0})}</div><div class="stat-label">Total cost</div></div>
+      <div class="stat-card ${ftrPct===null?'':ftrPct>=95?'green':ftrPct>=85?'amber':'red'}">
+        <div class="stat-val">${ftrPct!==null?ftrPct+'%':'—'}</div>
+        <div class="stat-label">First time right</div>
+        <div class="stat-sub">${doorsSupplied?doorsSupplied+' doors supplied':'Enter doors supplied ↑'}</div>
+      </div>
+    </div>
+    ${recurring.length?`<div class="detail-card" style="margin-bottom:14px;border-left:3px solid var(--red)">
+      <h4 style="color:var(--red);margin-bottom:8px">⚠️ Recurring fault types</h4>
+      ${recurring.map(([c,n])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px">${esc(c)}</div><span class="badge b-external">${n}× raised</span></div>`).join('')}
+    </div>`:''}
+    <div class="detail-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h4 style="margin:0">NCR history — ${esc(customer)}</h4>
+        <button class="top-btn ghost" style="font-size:11px" onclick="exportCustomerReport()">⬇ Export</button>
+      </div>
+      ${ncrs.length===0?'<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No NCRs found in this period.</div>':
+      ncrs.sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`
+        <div style="border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:10px${recurring.find(([c])=>c===r.category)?';border-left:3px solid var(--red)':''}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <div>
+              <span style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700;cursor:pointer" onclick="showView('detail');openDetail('${r.id}')">${esc(r.id)}</span>
+              ${r.ncr_type?`<span class="badge b-plan" style="font-size:10px;margin-left:6px">${esc(r.ncr_type)}</span>`:''}
+              ${r.error_type?errorTypeBadge(r.error_type):''}
+              ${recurring.find(([c])=>c===r.category)?'<span class="badge" style="font-size:10px;background:rgba(239,68,68,.15);color:var(--red);margin-left:4px">🔄 Recurring</span>':''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <span class="${statusCls(r.status)}" style="font-size:11px">${r.status}</span>
+              <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${r.date}</div>
+            </div>
+          </div>
+          <div style="font-size:13px;margin-bottom:6px">${esc(r.issue||'—')}</div>
+          ${r.door_ref||r.so?`<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:6px">${[r.door_ref?'Door: '+r.door_ref:'',r.so?'SO: '+r.so:''].filter(Boolean).join(' · ')}</div>`:''}
+          ${r.root_cause?`<div style="background:var(--surface);border-radius:4px;padding:6px 10px;font-size:12px;margin-bottom:4px"><span style="font-size:10px;font-family:var(--mono);color:var(--muted)">ROOT CAUSE — </span>${esc(r.root_cause)}</div>`:''}
+          ${r.corrective?`<div style="background:rgba(34,197,94,.07);border-radius:4px;padding:6px 10px;font-size:12px"><span style="font-size:10px;font-family:var(--mono);color:var(--green)">RECTIFICATION — </span>${esc(r.corrective)}</div>`:''}
+          ${!r.root_cause&&!r.corrective?'<div style="font-size:11px;color:var(--faint);font-family:var(--mono)">RCA not yet completed</div>':''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function exportCustomerReport(){
+  const customer=document.getElementById('crCustomer')?.value;
+  if(!customer){showToast('⚠️ Select a customer first');return;}
+  const range=crDateRange();
+  const ncrs=ncrRecords.filter(r=>r.customer===customer&&r.date>=range.from&&r.date<=range.to);
+  const csv=`Solidcor Customer Report — ${customer}\nPeriod: ${range.from} to ${range.to}\nGenerated: ${new Date().toLocaleDateString('en-GB')}\n\nNCR ID,Date,Type,Door Ref,SO,Issue,Root Cause,Corrective Action,Status,Cost,Error Type\n`+
+    ncrs.map(r=>`"${r.id}","${r.date}","${r.ncr_type||r.type||''}","${r.door_ref||''}","${r.so||''}","${(r.issue||'').replace(/"/g,"'")}","${(r.root_cause||'').replace(/"/g,"'")}","${(r.corrective||'').replace(/"/g,"'")}","${r.status}","${r.cost||0}","${r.error_type||''}"`).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`customer-report-${customer.replace(/[^a-z0-9]/gi,'-')}.csv`;a.click();
+  showToast('✓ Customer report exported');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXTERNAL NCR FORM
+// ═══════════════════════════════════════════════════════════════
+function openExtNcrModal(){
+  const now=new Date();
+  const local=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('extNcrDatetime').value=local;
+  ['extNcrCompany','extNcrPersonName','extNcrPhone','extNcrProject','extNcrSO','extNcrFaultDesc','extNcrEmail','extNcrDoorNumber'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  document.getElementById('extNcrIssueType').value='';
+  document.getElementById('extNcrDoorRow').classList.add('hidden');
+  document.getElementById('extNcrErr').textContent='';
+  openModal('extNcrModal');
+}
+
+function extNcrIssueTypeChange(){
+  const val=document.getElementById('extNcrIssueType').value;
+  const row=document.getElementById('extNcrDoorRow');
+  const lbl=document.getElementById('extNcrDoorLabel');
+  const needsDoor=val==='Doorset'||val==='Window';
+  row.classList.toggle('hidden',!needsDoor);
+  if(lbl)lbl.innerHTML=(val==='Window'?'Window number':'Door / slab number')+' <span class="req-star">*</span>';
+}
+
+async function submitExtNcr(){
+  const err=document.getElementById('extNcrErr');
+  const company=document.getElementById('extNcrCompany').value.trim();
+  const person=document.getElementById('extNcrPersonName').value.trim();
+  const phone=document.getElementById('extNcrPhone').value.trim();
+  const issueType=document.getElementById('extNcrIssueType').value;
+  const fault=document.getElementById('extNcrFaultDesc').value.trim();
+  const doorNum=document.getElementById('extNcrDoorNumber').value.trim();
+  const needsDoor=issueType==='Doorset'||issueType==='Window';
+  if(!company){err.textContent='⚠️ Customer company name is required';return;}
+  if(!person){err.textContent='⚠️ Name of person raising NCR is required';return;}
+  if(!phone){err.textContent='⚠️ Contact number is required';return;}
+  if(!issueType){err.textContent='⚠️ Please select the type of issue';return;}
+  if(needsDoor&&!doorNum){err.textContent='⚠️ Door/window number is required';return;}
+  if(!fault){err.textContent='⚠️ Please describe the fault';return;}
+  const now=new Date().toISOString().slice(0,10);
+  const id=genNCRId(now);
+  const newNCR={
+    id,date:now,customer:company,raised_by:person,
+    contact_phone:phone,
+    so:document.getElementById('extNcrSO').value.trim(),
+    project_ref:document.getElementById('extNcrProject').value.trim(),
+    door_ref:doorNum,ncr_type:issueType,
+    issue:fault,
+    customer_email:document.getElementById('extNcrEmail').value.trim(),
+    type:'external',status:'open',category:issueType,dept:'External',
+    cost:0,transport:0,root_cause:'',corrective:'',completed:null,
+    legacy:false,error_type:null,
+    raised_datetime:document.getElementById('extNcrDatetime').value,
+    source:'external_form'
+  };
+  ncrRecords.unshift(newNCR);
+  await sbUps('ncr_records',newNCR).catch(()=>{});
+  if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
+  closeModal('extNcrModal');
+  showToast(`✓ External NCR submitted — ${id}`);
+  renderTable('all');renderTable('external');renderDashboard();updateBadges();
+  setTimeout(()=>{showView('detail');openDetail(id);},100);
+}
+
 async function sendCustomerSubmissionEmail(ncr){
   if(!ncr.customer_email) return;
   const s = loadSettings();
@@ -3633,6 +4344,12 @@ function sendResolutionEmailPrompt(ncrId){
 
 function checkPortalMode(){
   const params = new URLSearchParams(window.location.search);
+  if(params.get('portal')==='extncrform'){
+    document.getElementById('loginGate').style.display='none';
+    document.getElementById('app').style.display='none';
+    showExtNcrPortal();
+    return true;
+  }
   if(params.get('portal')==='ncr'){
     document.getElementById('loginGate').style.display='none';
     document.getElementById('app').style.display='none';
