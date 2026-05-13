@@ -850,7 +850,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">📈 Weekly exec report</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to receive the weekly executive NCR report every Monday at 7AM. Covers NCRs raised, SLA compliance, top issues and customer FTR%.</div>
-          <input type="email" id="weekly_report_email" placeholder="director@solidcor.co.uk"
+          <input type="text" id="weekly_report_email" placeholder="director@solidcor.co.uk, manager@solidcor.co.uk"
             style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
           <button class="top-btn ghost" onclick="sendWeeklyReportNow()" style="font-size:12px">Send now (this week's report)</button>
         </div>
@@ -859,7 +859,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">📦 Daily stock scrap report</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to receive the previous day's scrap/remake stock report automatically each morning. Lists all NCRs where stock was scrapped or needs remaking so stock levels can be adjusted.</div>
-          <input type="email" id="stock_report_email" placeholder="stores@solidcor.co.uk"
+          <input type="text" id="stock_report_email" placeholder="stores@solidcor.co.uk, manager@solidcor.co.uk"
             style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
           <button class="top-btn ghost" onclick="sendStockReportNow()" style="font-size:12px">Send now (yesterday's report)</button>
         </div>
@@ -4955,9 +4955,10 @@ async function sendNcrEmail(toEmails,subject,bodyHtml){
   try{
     emailjs.init({publicKey:s.ejs_pubkey});
     const emails=(toEmails||'').split(',').map(e=>e.trim()).filter(Boolean);
-    for(const to of emails){
+    for(let i=0;i<emails.length;i++){
+      if(i>0) await new Promise(r=>setTimeout(r,1500)); // delay between sends
       await emailjs.send(s.ejs_service,s.ejs_template,{
-        to_email:to,subject,html_content:bodyHtml,reply_to:'quality@solidcor.co.uk'
+        to_email:emails[i],subject,html_content:bodyHtml,reply_to:'quality@solidcor.co.uk'
       });
     }
     return true;
