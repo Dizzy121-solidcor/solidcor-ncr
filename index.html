@@ -3387,7 +3387,15 @@ async function sendWeeklyReport(toEmail,manual){
   const we=weekEnd.toISOString().slice(0,10);
   const weekLabel=`${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
 
-  const weekNcrs=ncrRecords.filter(r=>r.date>=ws&&r.date<=we&&!r.legacy);
+  let weekNcrs=ncrRecords.filter(r=>r.date>=ws&&r.date<=we);
+  // If nothing this week, show last 30 days instead
+  let periodLabel=`Week of ${weekLabel}`;
+  if(!weekNcrs.length){
+    const month=new Date(now);month.setDate(now.getDate()-30);
+    const ms=month.toISOString().slice(0,10);
+    weekNcrs=ncrRecords.filter(r=>r.date>=ms&&r.date<=we);
+    periodLabel=`Last 30 days (no NCRs in past week)`;
+  }
   const ext=weekNcrs.filter(r=>r.type==='external');
   const int=weekNcrs.filter(r=>r.type==='internal');
   const closed=weekNcrs.filter(r=>r.status==='closed').length;
@@ -3396,7 +3404,7 @@ async function sendWeeklyReport(toEmail,manual){
   // SLA compliance this week
   const s=loadSettings();
   const slaTarget=s.sla_external||5;
-  const openExt=ncrRecords.filter(r=>r.type==='external'&&r.status!=='closed'&&!r.legacy);
+  const openExt=ncrRecords.filter(r=>r.type==='external'&&r.status!=='closed');
   const breached=openExt.filter(r=>getSlaStatus(r).status==='breached').length;
   const slaTotal=openExt.length;
   const slaPct=slaTotal>0?Math.round((slaTotal-breached)/slaTotal*100):100;
@@ -3410,7 +3418,7 @@ async function sendWeeklyReport(toEmail,manual){
   const topCusts=Object.entries(custs).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   // All open NCRs with SLA status
-  const openNcrs=ncrRecords.filter(r=>r.status!=='closed'&&!r.legacy).sort((a,b)=>a.date.localeCompare(b.date));
+  const openNcrs=ncrRecords.filter(r=>r.status!=='closed').sort((a,b)=>a.date.localeCompare(b.date));
 
   const statBox=(val,label,colour)=>`<div style="background:#f9fafb;border-radius:8px;padding:14px;text-align:center;border:1px solid #e5e7eb">
     <div style="font-size:28px;font-weight:800;color:${colour}">${val}</div>
@@ -3423,7 +3431,7 @@ async function sendWeeklyReport(toEmail,manual){
     <div style="background:#111316;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
       <div><span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
       <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Weekly NCR Executive Report</span></div>
-      <div style="color:#7A7E8A;font-size:12px">${weekLabel}</div>
+      <div style="color:#7A7E8A;font-size:12px">${periodLabel}</div>
     </div>
     <div style="padding:20px 24px">
 
