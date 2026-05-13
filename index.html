@@ -855,6 +855,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <button class="top-btn ghost" onclick="sendWeeklyReportNow()" style="font-size:12px">Send now (this week's report)</button>
         </div>
 
+        <!-- Daily RFT report -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">🎯 Daily RFT report</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to receive the daily Right First Time report each morning. Shows yesterday's deliveries, NCRs raised, and RFT% per customer. Requires a delivery schedule to be imported in the Deliveries view.</div>
+          <input type="text" id="rft_report_email" placeholder="quality@solidcor.co.uk, director@solidcor.co.uk"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+          <button class="top-btn ghost" onclick="sendRftReportNow()" style="font-size:12px">Send now (yesterday's RFT)</button>
+        </div>
+
         <!-- Daily stock scrap report -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">📦 Daily stock scrap report</div>
@@ -3975,7 +3984,149 @@ function downloadExtNcrQR(url){
 }
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
-// DAILY STOCK SCRAP REPORT EMAIL
+// DAILY RFT REPORT
+// ═══════════════════════════════════════════════════════════════
+const RFT_REPORT_KEY='ncr_rft_report_sent';
+
+function checkDailyRftReport(){
+  const s=loadSettings();
+  if(!s.rft_report_email||!s.ejs_service||!s.ejs_template||!s.ejs_pubkey)return;
+  const today=new Date().toISOString().slice(0,10);
+  if(localStorage.getItem(RFT_REPORT_KEY)===today)return;
+  if(new Date().getHours()<6)return;
+  sendRftReport(s.rft_report_email,false);
+  localStorage.setItem(RFT_REPORT_KEY,today);
+}
+
+function sendRftReportNow(){
+  const s=loadSettings();
+  if(!s.rft_report_email){showToast('⚠️ Set a RFT report email address first');return;}
+  sendRftReport(s.rft_report_email,true);
+}
+
+async function sendRftReport(toEmail,manual){
+  const yd=new Date();yd.setDate(yd.getDate()-1);
+  const ydStr=yd.toISOString().slice(0,10);
+  const ydLabel=yd.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Load delivery schedule
+  if(!deliveries.length)loadDeliveries();
+
+  // Yesterday's deliveries (by delivery_date) and NCRs (by date)
+  const ydDeliveries=deliveries.filter(d=>d.delivery_date===ydStr);
+  const ydNcrs=ncrRecords.filter(r=>r.date===ydStr);
+
+  // If no delivery schedule imported, still send a basic NCR summary
+  const totalDoors=ydDeliveries.reduce((s,d)=>s+(d.qty||1),0);
+
+  // Per-customer breakdown
+  const custMap={};
+  ydDeliveries.forEach(d=>{
+    const c=d.customer||'Unknown';
+    if(!custMap[c])custMap[c]={doors:0,ncrs:[],doorRefs:[]};
+    custMap[c].doors+=(d.qty||1);
+    custMap[c].doorRefs.push(d.door_ref);
+  });
+
+  // Match NCRs to deliveries by door_ref or customer
+  ydNcrs.forEach(r=>{
+    const matchedCust=Object.keys(custMap).find(c=>
+      custMap[c].doorRefs.includes(r.door_ref) ||
+      c===r.customer
+    );
+    const key=matchedCust||r.customer||'Unmatched';
+    if(!custMap[key])custMap[key]={doors:0,ncrs:[],doorRefs:[]};
+    custMap[key].ncrs.push(r);
+  });
+
+  const custRows=Object.entries(custMap).sort((a,b)=>b[1].ncrs.length-a[1].ncrs.length);
+  const totalNcrs=ydNcrs.length;
+  const rftPct=totalDoors>0?Math.max(0,Math.round((totalDoors-totalNcrs)/totalDoors*100)):null;
+  const rftColour=rftPct===null?'#6b7280':rftPct>=95?'#22c55e':rftPct>=85?'#f59e0b':'#ef4444';
+
+  // Build email
+  let html='<div style="font-family:Arial,sans-serif;max-width:660px;border-top:4px solid #E07B1A">'
+    +'<div style="background:#111316;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">'
+    +'<span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>'
+    +'<span style="color:#7A7E8A;font-size:12px">Daily RFT Report &mdash; '+ydLabel+'</span>'
+    +'</div>'
+    +'<div style="padding:20px 24px">'
+
+    // Stat tiles
+    +'<table width="100%" cellpadding="0" cellspacing="8" style="margin-bottom:20px"><tr>'
+    +'<td style="background:'+(rftPct===null?'#f9fafb':rftPct>=95?'#f0fdf4':rftPct>=85?'#fff7ed':'#fef2f2')+';border-radius:8px;padding:14px;text-align:center;border:1px solid #e5e7eb">'
+    +'<div style="font-size:32px;font-weight:800;color:'+rftColour+'">'+(rftPct!==null?rftPct+'%':'—')+'</div>'
+    +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-top:3px">Right First Time</div>'
+    +'</td>'
+    +'<td style="background:#f9fafb;border-radius:8px;padding:14px;text-align:center;border:1px solid #e5e7eb">'
+    +'<div style="font-size:32px;font-weight:800;color:#111">'+totalDoors+'</div>'
+    +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-top:3px">Doors delivered</div>'
+    +'</td>'
+    +'<td style="background:'+(totalNcrs>0?'#fef2f2':'#f0fdf4')+';border-radius:8px;padding:14px;text-align:center;border:1px solid '+(totalNcrs>0?'#fecaca':'#bbf7d0')+'">'
+    +'<div style="font-size:32px;font-weight:800;color:'+(totalNcrs>0?'#dc2626':'#22c55e')+'">'+totalNcrs+'</div>'
+    +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-top:3px">NCRs raised</div>'
+    +'</td>'
+    +'</tr></table>';
+
+  // No delivery data warning
+  if(!ydDeliveries.length){
+    html+='<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;font-size:13px;color:#92400e;margin-bottom:16px">'
+    +'&#9888; No deliveries found in schedule for '+ydStr+'. Import your delivery schedule in the Deliveries view to enable full RFT tracking.'
+    +'</div>';
+  }
+
+  // Per-customer table
+  if(custRows.length){
+    html+='<h3 style="font-size:13px;margin:0 0 8px">Customer breakdown</h3>'
+    +'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:20px">'
+    +'<tr style="background:#f3f4f6">'
+    +'<th style="padding:7px 10px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Customer</th>'
+    +'<th style="padding:7px 10px;text-align:right;color:#6b7280;font-size:11px;text-transform:uppercase">Doors</th>'
+    +'<th style="padding:7px 10px;text-align:right;color:#6b7280;font-size:11px;text-transform:uppercase">NCRs</th>'
+    +'<th style="padding:7px 10px;text-align:right;color:#6b7280;font-size:11px;text-transform:uppercase">RFT%</th>'
+    +'</tr>'
+    +custRows.map(([c,d])=>{
+      const cRft=d.doors>0?Math.max(0,Math.round((d.doors-d.ncrs.length)/d.doors*100)):null;
+      const cColour=cRft===null?'#6b7280':cRft>=95?'#22c55e':cRft>=85?'#f59e0b':'#ef4444';
+      return '<tr style="border-bottom:1px solid #eee'+(d.ncrs.length?';background:#fef9f9':'')+'"><td style="padding:7px 10px">'+c+'</td>'
+        +'<td style="padding:7px 10px;text-align:right">'+d.doors+'</td>'
+        +'<td style="padding:7px 10px;text-align:right;color:'+(d.ncrs.length?'#dc2626':'#22c55e')+';font-weight:700">'+d.ncrs.length+'</td>'
+        +'<td style="padding:7px 10px;text-align:right;font-weight:700;color:'+cColour+'">'+(cRft!==null?cRft+'%':'—')+'</td></tr>'
+        +(d.ncrs.length?d.ncrs.map(r=>'<tr style="background:#fff8f8;border-bottom:1px solid #f3e8e8">'
+          +'<td style="padding:4px 10px 4px 22px;color:#6b7280;font-size:11px">&#8627; '+r.id+' &mdash; '+(r.door_ref||'')+'</td>'
+          +'<td colspan="3" style="padding:4px 10px;font-size:11px;color:#6b7280">'+(r.issue||'').slice(0,60)+'</td></tr>').join(''):'');
+    }).join('')
+    +'</table>';
+  }
+
+  // All NCRs raised yesterday (even without delivery match)
+  if(ydNcrs.length){
+    html+='<h3 style="font-size:13px;margin:0 0 8px">All NCRs raised yesterday ('+ydNcrs.length+')</h3>'
+    +'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:16px">'
+    +'<tr style="background:#f3f4f6"><th style="padding:6px 10px;text-align:left;color:#6b7280;font-size:11px">NCR ID</th>'
+    +'<th style="padding:6px 10px;text-align:left;color:#6b7280;font-size:11px">Customer</th>'
+    +'<th style="padding:6px 10px;text-align:left;color:#6b7280;font-size:11px">Door ref</th>'
+    +'<th style="padding:6px 10px;text-align:left;color:#6b7280;font-size:11px">Issue</th></tr>'
+    +ydNcrs.map(r=>'<tr style="border-bottom:1px solid #eee">'
+      +'<td style="padding:6px 10px;font-family:monospace;color:#E07B1A">'+r.id+'</td>'
+      +'<td style="padding:6px 10px">'+( r.customer||'—')+'</td>'
+      +'<td style="padding:6px 10px;font-size:11px;color:#6b7280">'+(r.door_ref||'—')+'</td>'
+      +'<td style="padding:6px 10px;color:#6b7280">'+(r.issue||'—').slice(0,50)+'</td></tr>').join('')
+    +'</table>';
+  }else{
+    html+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;color:#166534;font-size:14px;margin-bottom:16px">'
+    +'&#10003; No NCRs raised yesterday &mdash; perfect day!'
+    +'</div>';
+  }
+
+  html+='</div>'
+    +'<div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb">'
+    +'Solidcor NCR Hub &middot; Daily RFT Report &middot; '+(manual?'Sent manually':'Automated')+'</div></div>';
+
+  const subj='[Solidcor RFT] '+(rftPct!==null?rftPct+'% RFT &mdash; ':'')+ydLabel+' &mdash; '+totalNcrs+' NCR'+(totalNcrs!==1?'s':'');
+  await sendNcrEmail(toEmail,subj,html);
+  if(manual)showToast('&#10003; RFT report sent to '+toEmail);
+}
 // ═══════════════════════════════════════════════════════════════
 const STOCK_REPORT_KEY='ncr_stock_report_sent';
 
@@ -4916,6 +5067,7 @@ function saveSettings(){
     picker_email:document.getElementById('picker_email').value.trim(),
     notify_email:document.getElementById('notify_email').value.trim(),
     stock_report_email:document.getElementById('stock_report_email').value.trim(),
+    rft_report_email:document.getElementById('rft_report_email').value.trim(),
     weekly_report_email:document.getElementById('weekly_report_email').value.trim(),
     sla_external:parseInt(document.getElementById('sla_external').value)||5,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
@@ -4930,7 +5082,7 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','weekly_report_email','sla_external','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
