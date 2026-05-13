@@ -1,0 +1,262 @@
+// ═══════════════════════════════════════════════════════════════
+// send-ncr-email.js — Netlify Function
+// Handles all NCR email notifications server-side
+// No login required — called from portals, QR forms, daily report
+// ═══════════════════════════════════════════════════════════════
+
+const https = require('https');
+
+const EJS_SERVICE  = process.env.EJS_SERVICE_ID;
+const EJS_TEMPLATE = process.env.EJS_TEMPLATE_ID;
+const EJS_PUBKEY   = process.env.EJS_PUBLIC_KEY;
+const NETLIFY_URL  = process.env.URL || 'https://delightful-beijinho-67f487.netlify.app';
+
+// Send via EmailJS REST API
+function sendViaEmailJS(toEmail, subject, htmlBody) {
+  return new Promise((resolve) => {
+    if (!EJS_SERVICE || !EJS_TEMPLATE || !EJS_PUBKEY) {
+      console.log('EmailJS not configured');
+      resolve({ ok: false, reason: 'EmailJS env vars not set' });
+      return;
+    }
+
+    const payload = JSON.stringify({
+      service_id:   EJS_SERVICE,
+      template_id:  EJS_TEMPLATE,
+      user_id:      EJS_PUBKEY,
+      template_params: {
+        to_email:  toEmail,
+        subject:   subject,
+        html_body: htmlBody,
+        reply_to:  'quality@solidcor.co.uk'
+      }
+    });
+
+    const req = https.request({
+      hostname: 'api.emailjs.com',
+      path:     '/api/v1.0/email/send',
+      method:   'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'origin':         NETLIFY_URL
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        console.log(`Email to ${toEmail}: HTTP ${res.statusCode} — ${data.slice(0, 100)}`);
+        resolve({ ok: res.statusCode === 200, status: res.statusCode, body: data });
+      });
+    });
+    req.on('error', e => resolve({ ok: false, reason: e.message }));
+    req.write(payload);
+    req.end();
+  });
+}
+
+// ── Email templates ───────────────────────────────────────────────
+
+function buildSubmissionEmail(ncr) {
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:16px 24px">
+      <span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Quality Assurance</span>
+    </div>
+    <div style="padding:24px">
+      <h2 style="color:#E07B1A;font-size:18px;margin:0 0 16px">Your NCR has been received</h2>
+      <p style="font-size:14px;color:#333;line-height:1.6">Thank you for raising this with us. Our quality team will be in touch within <strong>5 working days</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px">
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600;width:150px">Reference</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee;font-family:monospace;font-weight:700;color:#E07B1A">${ncr.id}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Date raised</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
+        ${ncr.door_ref ? `<tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Door reference</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>` : ''}
+        ${ncr.so ? `<tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Sales order</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.so}</td></tr>` : ''}
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Issue reported</td>
+            <td style="padding:8px 10px">${ncr.issue || '—'}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;margin-top:20px">Please quote <strong>${ncr.id}</strong> in any correspondence regarding this matter.</p>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor Quality Team · Automated notification</div>
+  </div>`;
+}
+
+function buildAlertEmail(ncr) {
+  const typeLabel = ncr.type === 'external' ? '🌐 External' : '🏭 Internal';
+  const sourceLabel = ncr.source === 'external_portal' ? ' via customer portal'
+    : ncr.source === 'external_form' ? ' via ext. NCR form' : '';
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid ${ncr.type==='external'?'#3b82f6':'#f97316'}">
+    <div style="background:#111316;padding:14px 24px">
+      <span style="color:#E07B1A;font-weight:800;font-size:17px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">NCR Alert${sourceLabel}</span>
+    </div>
+    <div style="padding:20px 24px">
+      <h2 style="font-size:17px;margin:0 0 14px;color:#111316">${typeLabel} NCR Raised —
+        <span style="font-family:monospace;color:#E07B1A">${ncr.id}</span>
+      </h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:140px">Date raised</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Customer</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.customer || '—'}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Raised by</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.raised_by || '—'}${ncr.contact_phone ? ' · ' + ncr.contact_phone : ''}</td></tr>
+        ${ncr.so ? `<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Sales order</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.so}</td></tr>` : ''}
+        ${ncr.door_ref ? `<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Door ref</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>` : ''}
+        ${ncr.ncr_type ? `<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Type</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.ncr_type}</td></tr>` : ''}
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Issue</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.issue || '—'}</td></tr>
+        ${ncr.dept ? `<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Department</td>
+            <td style="padding:6px 10px">${ncr.dept}</td></tr>` : ''}
+      </table>
+    </div>
+    <div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor NCR Hub · Automated alert · ${new Date().toLocaleString('en-GB')}</div>
+  </div>`;
+}
+
+function buildResolutionEmail(ncr, resolution) {
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #22c55e">
+    <div style="background:#111316;padding:16px 24px">
+      <span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Quality Assurance</span>
+    </div>
+    <div style="padding:24px">
+      <h2 style="color:#22c55e;font-size:18px;margin:0 0 16px">✓ Your NCR has been resolved</h2>
+      <p style="font-size:14px;color:#333;line-height:1.6">We are pleased to confirm that the following non-conformance report has been resolved.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px">
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600;width:150px">Reference</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee;font-family:monospace;font-weight:700;color:#E07B1A">${ncr.id}</td></tr>
+        ${ncr.door_ref ? `<tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Door reference</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>` : ''}
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Original issue</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${ncr.issue || '—'}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Action taken</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #eee">${resolution || ncr.corrective || '—'}</td></tr>
+        <tr><td style="padding:8px 10px;background:#f5f5f5;font-weight:600">Resolved on</td>
+            <td style="padding:8px 10px">${new Date().toLocaleDateString('en-GB')}</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;margin-top:20px">If you have any questions please contact our quality team quoting <strong>${ncr.id}</strong>.</p>
+    </div>
+    <div style="padding:12px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor Quality Team · Automated notification</div>
+  </div>`;
+}
+
+function buildPickerEmail(ncrId, componentName, qty) {
+  return `<div style="font-family:Arial,sans-serif;max-width:500px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:14px 20px">
+      <span style="color:#E07B1A;font-weight:800;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Component Pick Request</span>
+    </div>
+    <div style="padding:20px">
+      <h3 style="color:#E07B1A;margin:0 0 14px">🧩 Pick required for NCR ${ncrId}</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600;width:120px">Component</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #eee">${componentName}</td></tr>
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600">Quantity</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #eee">${qty}</td></tr>
+        <tr><td style="padding:7px 10px;background:#f5f5f5;font-weight:600">NCR ref</td>
+            <td style="padding:7px 10px">${ncrId}</td></tr>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ── Main handler ──────────────────────────────────────────────────
+exports.handler = async (event) => {
+  // CORS headers so the browser can call this
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  let body;
+  try { body = JSON.parse(event.body); }
+  catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+
+  const { type, ncr, resolution, component, qty, notify_email, picker_email, customer_email } = body;
+
+  const results = [];
+
+  try {
+    switch (type) {
+
+      case 'submission': {
+        // Customer confirmation + NCR alert
+        if (customer_email || ncr.customer_email) {
+          const to = customer_email || ncr.customer_email;
+          const r = await sendViaEmailJS(to,
+            `[Solidcor] NCR Received — ${ncr.id} — ${ncr.door_ref || ncr.customer}`,
+            buildSubmissionEmail(ncr));
+          results.push({ to, ok: r.ok });
+        }
+        if (notify_email) {
+          const typeLabel = ncr.type === 'external' ? 'External' : 'Internal';
+          const r = await sendViaEmailJS(notify_email,
+            `[NCR Alert] ${typeLabel} — ${ncr.id} — ${ncr.customer || ncr.raised_by}`,
+            buildAlertEmail(ncr));
+          results.push({ to: notify_email, ok: r.ok });
+        }
+        break;
+      }
+
+      case 'resolution': {
+        if (customer_email || ncr.customer_email) {
+          const to = customer_email || ncr.customer_email;
+          const r = await sendViaEmailJS(to,
+            `[Solidcor] NCR Resolved — ${ncr.id}`,
+            buildResolutionEmail(ncr, resolution));
+          results.push({ to, ok: r.ok });
+        }
+        break;
+      }
+
+      case 'alert': {
+        if (notify_email) {
+          const typeLabel = ncr.type === 'external' ? 'External' : 'Internal';
+          const r = await sendViaEmailJS(notify_email,
+            `[NCR Alert] ${typeLabel} — ${ncr.id} — ${ncr.customer || ncr.raised_by}`,
+            buildAlertEmail(ncr));
+          results.push({ to: notify_email, ok: r.ok });
+        }
+        break;
+      }
+
+      case 'picker': {
+        if (picker_email) {
+          const r = await sendViaEmailJS(picker_email,
+            `[Solidcor] Pick required — ${component} for NCR ${ncr.id}`,
+            buildPickerEmail(ncr.id, component, qty));
+          results.push({ to: picker_email, ok: r.ok });
+        }
+        break;
+      }
+
+      default:
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown type: ' + type }) };
+    }
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ ok: true, results })
+    };
+
+  } catch (e) {
+    console.error('send-ncr-email error:', e.message);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+  }
+};
