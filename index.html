@@ -2524,7 +2524,8 @@ function openDetail(id){
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="emailNcrPdf('${id}')">📧 Email PDF</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="togglePin('${id}')" title="${pinned?'Unpin':'Pin this NCR'}">${pinned?'📌 Unpin':'📌 Pin'}</button>
     ${currentUser?.isAdmin ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--accent);border-color:var(--accent)" onclick="openEditNcr('${id}')">✏️ Edit</button>` : ''}
-    ${r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
+    ${r.type==='external' && r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
+    ${r.type==='external' && !r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--muted)" onclick="addCustomerEmail('${id}')">📧 Add customer email</button>` : ''}
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--muted);border-color:var(--border2)" onclick="toggleNcrType('${id}')" title="Change NCR type">⇄ ${r.type==='internal'?'Make external':'Make internal'}</button>` : ''}
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteNcr('${id}')">🗑 Delete</button>` : ''}
   `;
@@ -5732,6 +5733,10 @@ function exportNcrPdf(id){
       ${r.cost?field('Cost','£'+(r.cost||0).toFixed(2)):''}
       ${r.contact_phone?field('Contact number',r.contact_phone):''}
       ${r.project_ref?field('Project reference',r.project_ref):''}
+      ${r.type==='external'?`<tr><td style="padding:7px 12px;background:#f8f9fa;font-weight:600;font-size:12px;color:#374151;width:160px;border-bottom:1px solid #e5e7eb">Customer email</td>
+        <td style="padding:7px 12px;font-size:13px;border-bottom:1px solid #e5e7eb">
+          ${r.customer_email?`<a href="mailto:${r.customer_email}" style="color:#3b82f6">${r.customer_email}</a>`:'<span style="color:#9ca3af;font-style:italic">Not set</span>'}
+        </td></tr>`:''}
     </table>
   </div>
 
@@ -6265,6 +6270,20 @@ function genNCRId(dateStr){
   const nextNum=Math.max(0,...lastNum)+1;
   const year=(dateStr||new Date().toISOString().slice(0,10)).slice(2,4);
   return `NCR${year}-${String(nextNum).padStart(3,'0')}`;
+}
+
+function addCustomerEmail(id){
+  const r=ncrRecords.find(x=>x.id===id);
+  if(!r) return;
+  const current=r.customer_email||'';
+  const email=prompt('Enter customer email address'+(current?` (current: ${current})`:'')+':', current);
+  if(email===null) return; // cancelled
+  const trimmed=email.trim();
+  if(trimmed&&!trimmed.includes('@')){showToast('⚠️ Invalid email address');return;}
+  r.customer_email=trimmed;
+  sbPatch('ncr_records',id,{customer_email:trimmed||null}).catch(()=>{});
+  showToast(trimmed?`✓ Email saved — ${trimmed}`:'✓ Email removed');
+  openDetail(id); // refresh detail
 }
 
 function sendResolutionEmailPrompt(ncrId){
