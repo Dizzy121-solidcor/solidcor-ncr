@@ -3278,43 +3278,68 @@ function importDeliveries(event){
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
       if(!rows.length){showToast('⚠️ File appears empty');return;}
 
-      // Map headers
+      // Extended map — includes Solidcor production tracker column names
       const DEL_COL_MAP={
         'customer':'customer','customer name':'customer','client':'customer',
+        // Solidcor tracker specific
+        'solidcor door id':'door_ref','door id':'door_ref',
+        'customer door ref':'customer_door_ref','cust door ref':'customer_door_ref',
+        'unleashed order number':'so',
+        'delivery due date':'delivery_date',
+        'despatched':'despatched','dispatched':'despatched',
+        'value':'value','range':'range','style':'style',
+        'product type':'product_type','door and window type':'door_type',
+        // Generic
         'door ref':'door_ref','door reference':'door_ref','door number':'door_ref',
-        'door no':'door_ref','door':'door_ref','slab number':'door_ref',
+        'door no':'door_ref','slab number':'door_ref',
         'sales order':'so','so':'so','order number':'so','order no':'so',
         'delivery date':'delivery_date','date':'delivery_date','due date':'delivery_date',
-        'qty':'qty','quantity':'qty','units':'qty','doors':'qty',
+        'ship date':'delivery_date',
+        'qty':'qty','quantity':'qty','units':'qty','unit':'qty','doors':'qty',
       };
-      const headers=rows[0].map(h=>{
-        const clean=(h||'').toString().toLowerCase().trim();
-        return DEL_COL_MAP[clean]||null;
-      });
+
+      // Find header row — try rows 0–4, pick the one with most column matches
+      let headerIdx=0,headers=[],bestScore=0;
+      for(let i=0;i<Math.min(5,rows.length);i++){
+        const mapped=rows[i].map(h=>DEL_COL_MAP[(h||'').toString().toLowerCase().trim()]);
+        const score=mapped.filter(Boolean).length;
+        if(score>bestScore){bestScore=score;headerIdx=i;headers=mapped;}
+      }
+      if(bestScore<2){
+        showToast('⚠️ Could not recognise columns — expected Customer, Solidcor Door ID, Delivery Due Date');
+        return;
+      }
+
+      const parseDate=raw=>{
+        if(!raw)return'';
+        const d=new Date(raw);
+        if(!isNaN(d.getTime()))return d.toISOString().slice(0,10);
+        const serial=parseFloat(raw);
+        if(!isNaN(serial)&&serial>40000){
+          return new Date((serial-25569)*86400*1000).toISOString().slice(0,10);
+        }
+        return'';
+      };
 
       const data=[];
-      for(let i=1;i<rows.length;i++){
+      for(let i=headerIdx+1;i<rows.length;i++){
         const row=rows[i];
         if(row.every(c=>!c||c.toString().trim()===''))continue;
         const obj={};
         headers.forEach((f,idx)=>{if(f)obj[f]=(row[idx]||'').toString().trim();});
         if(!obj.customer&&!obj.door_ref)continue;
-        // Parse date
-        if(obj.delivery_date){
-          const d=new Date(obj.delivery_date);
-          if(!isNaN(d))obj.delivery_date=d.toISOString().slice(0,10);
-        }
+        obj.delivery_date=parseDate(obj.delivery_date);
         obj.qty=parseInt(obj.qty)||1;
         obj._id='del_'+i+'_'+Date.now();
         data.push(obj);
       }
 
-      if(!data.length){showToast('⚠️ No valid rows found');return;}
+      if(!data.length){showToast('⚠️ No data rows found — check the file has Customer and Door ID columns');return;}
       deliveries=data;
       localStorage.setItem(DEL_KEY,JSON.stringify(deliveries));
-      showToast(`✓ Imported ${data.length} delivery records`);
+      showToast(`✓ Imported ${data.length} records from ${file.name}`);
       renderDeliveries();
-    }catch(e){showToast('⚠️ Could not read file: '+e.message);}
+    }catch(e){showToast('⚠️ Error reading file: '+e.message);console.error(e);}
   };
   reader.readAsArrayBuffer(file);
   event.target.value='';
