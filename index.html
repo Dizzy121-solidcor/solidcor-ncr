@@ -3380,109 +3380,55 @@ function sendWeeklyReportNow(){
 }
 
 async function sendWeeklyReport(toEmail,manual){
-  const now=new Date();
   const s=loadSettings();
-  const weekLabel=now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  const monthStart=new Date(now);monthStart.setDate(now.getDate()-30);
-  const ms=monthStart.toISOString().slice(0,10);
-
-  // Core stats — no heavy iteration
+  const now=new Date();
   const all=ncrRecords;
   const allOpen=all.filter(r=>r.status!=='closed');
-  const allExt=all.filter(r=>r.type==='external');
-  const allInt=all.filter(r=>r.type==='internal');
-  const extOpen=allExt.filter(r=>r.status!=='closed');
-  const intOpen=allInt.filter(r=>r.status!=='closed');
-  const recent=all.filter(r=>r.date>=ms);
-  const totalCost=all.reduce((s,r)=>s+(r.cost||0),0);
-
-  // SLA
+  const extOpen=all.filter(r=>r.type==='external'&&r.status!=='closed');
+  const intOpen=all.filter(r=>r.type==='internal'&&r.status!=='closed');
+  const totalCost=all.reduce((t,r)=>t+(r.cost||0),0);
   const slaTarget=s.sla_external||5;
   const breached=extOpen.filter(r=>getSlaStatus(r).status==='breached').length;
-  const warning=extOpen.filter(r=>getSlaStatus(r).status==='warning').length;
   const slaPct=extOpen.length>0?Math.round((extOpen.length-breached)/extOpen.length*100):100;
-  const slaColour=slaPct>=90?'#22c55e':slaPct>=70?'#f59e0b':'#ef4444';
-
-  // Top 5 customers
-  const custs={};allExt.forEach(r=>{if(r.customer)custs[r.customer]=(custs[r.customer]||0)+1;});
+  const monthStart=new Date(now);monthStart.setDate(now.getDate()-30);
+  const recent=all.filter(r=>r.date>=monthStart.toISOString().slice(0,10));
+  const custs={};all.filter(r=>r.type==='external').forEach(r=>{if(r.customer)custs[r.customer]=(custs[r.customer]||0)+1;});
   const topCusts=Object.entries(custs).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
-  // Top 5 fault categories
-  const cats={};all.forEach(r=>{if(r.category)cats[r.category]=(cats[r.category]||0)+1;});
-  const topCats=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const lines=[
+    'SOLIDCOR — Weekly NCR Report',
+    'Generated: '+now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}),
+    '',
+    '=== OVERVIEW ===',
+    'Total open NCRs: '+allOpen.length,
+    'External open: '+extOpen.length,
+    'Internal open: '+intOpen.length,
+    'Total cost (all NCRs): £'+totalCost.toLocaleString('en-GB',{maximumFractionDigits:0}),
+    '',
+    '=== SLA COMPLIANCE ===',
+    'External SLA target: '+slaTarget+' days',
+    'Compliance: '+slaPct+'%',
+    'Breached: '+breached,
+    '',
+    '=== LAST 30 DAYS ===',
+    'NCRs raised: '+recent.length,
+    'External: '+recent.filter(r=>r.type==='external').length,
+    'Internal: '+recent.filter(r=>r.type==='internal').length,
+    '',
+    '=== TOP CUSTOMERS (ALL TIME) ===',
+  ].concat(topCusts.map(([c,n])=>'  '+c+': '+n+' NCRs'));
 
-  // Breached NCRs only (keep table small)
-  const breachedNcrs=extOpen.filter(r=>getSlaStatus(r).status==='breached').sort((a,b)=>a.date.localeCompare(b.date)).slice(0,10);
+  if(breached>0){
+    lines.push('');
+    lines.push('=== SLA BREACHES ===');
+    extOpen.filter(r=>getSlaStatus(r).status==='breached').slice(0,10).forEach(r=>{
+      lines.push('  '+r.id+' | '+r.customer+' | '+getSlaStatus(r).days+'d open | '+(r.issue||'').slice(0,50));
+    });
+  }
 
-  const html=
-    '<div style="font-family:Arial,sans-serif;max-width:650px;border-top:4px solid #E07B1A">'
-    +'<div style="background:#111316;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">'
-    +'<span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>'
-    +'<span style="color:#7A7E8A;font-size:12px">Weekly NCR Report &mdash; '+weekLabel+'</span>'
-    +'</div>'
-    +'<div style="padding:20px 24px">'
-
-    // Summary tiles
-    +'<table width="100%" cellpadding="0" cellspacing="10" style="margin-bottom:20px"><tr>'
-    +'<td style="background:#fef2f2;border-radius:8px;padding:12px;text-align:center;border:1px solid #fecaca"><div style="font-size:26px;font-weight:800;color:#dc2626">'+allOpen.length+'</div><div style="font-size:11px;color:#6b7280;text-transform:uppercase">Open NCRs</div></td>'
-    +'<td style="background:#eff6ff;border-radius:8px;padding:12px;text-align:center;border:1px solid #bfdbfe"><div style="font-size:26px;font-weight:800;color:#3b82f6">'+extOpen.length+'</div><div style="font-size:11px;color:#6b7280;text-transform:uppercase">External open</div></td>'
-    +'<td style="background:#fff7ed;border-radius:8px;padding:12px;text-align:center;border:1px solid #fed7aa"><div style="font-size:26px;font-weight:800;color:#f97316">'+intOpen.length+'</div><div style="font-size:11px;color:#6b7280;text-transform:uppercase">Internal open</div></td>'
-    +'<td style="background:#f9fafb;border-radius:8px;padding:12px;text-align:center;border:1px solid #e5e7eb"><div style="font-size:22px;font-weight:800;color:#E07B1A">&pound;'+totalCost.toLocaleString('en-GB',{maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#6b7280;text-transform:uppercase">Total cost</div></td>'
-    +'</tr></table>'
-
-    // SLA bar
-    +'<div style="background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:20px">'
-    +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:6px">SLA Compliance &mdash; External NCRs ('+slaTarget+'-day target)</div>'
-    +'<div style="font-size:30px;font-weight:800;color:'+slaColour+'">'+slaPct+'%</div>'
-    +'<div style="background:#e5e7eb;border-radius:4px;height:8px;margin:8px 0"><div style="width:'+slaPct+'%;height:100%;background:'+slaColour+';border-radius:4px"></div></div>'
-    +'<div style="font-size:12px;color:#6b7280">'+breached+' breached &nbsp;&middot;&nbsp; '+warning+' due soon &nbsp;&middot;&nbsp; '+(extOpen.length-breached-warning)+' within SLA &nbsp;&middot;&nbsp; '+extOpen.length+' total open</div>'
-    +'</div>'
-
-    // Last 30 days
-    +'<div style="background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:20px">'
-    +'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:6px">Last 30 days ('+recent.length+' NCRs)</div>'
-    +'<div style="font-size:13px">External: <strong>'+recent.filter(r=>r.type==='external').length+'</strong> &nbsp; Internal: <strong>'+recent.filter(r=>r.type==='internal').length+'</strong> &nbsp; Cost: <strong>&pound;'+recent.reduce((s,r)=>s+(r.cost||0),0).toFixed(2)+'</strong></div>'
-    +'</div>'
-
-    // Top customers
-    +(topCusts.length?'<h3 style="font-size:13px;margin:0 0 8px">Top customers (total NCRs)</h3>'
-    +'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:20px">'
-    +'<tr style="background:#f3f4f6"><th style="padding:6px 10px;text-align:left;color:#6b7280">Customer</th><th style="padding:6px 10px;text-align:right;color:#6b7280">Total</th><th style="padding:6px 10px;text-align:right;color:#6b7280">Open</th></tr>'
-    +topCusts.map(([c,n])=>{
-      const open=allExt.filter(r=>r.customer===c&&r.status!=='closed').length;
-      return '<tr style="border-bottom:1px solid #eee"><td style="padding:6px 10px">'+c+'</td>'
-        +'<td style="padding:6px 10px;text-align:right;font-weight:700;color:#3b82f6">'+n+'</td>'
-        +'<td style="padding:6px 10px;text-align:right;color:'+(open>0?'#dc2626':'#16a34a')+'">'+open+'</td></tr>';
-    }).join('')
-    +'</table>':'')
-
-    // Top fault types
-    +(topCats.length?'<h3 style="font-size:13px;margin:0 0 8px">Top fault categories (all time)</h3>'
-    +'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:20px">'
-    +'<tr style="background:#f3f4f6"><th style="padding:6px 10px;text-align:left;color:#6b7280">Fault type</th><th style="padding:6px 10px;text-align:right;color:#6b7280">Count</th></tr>'
-    +topCats.map(([c,n])=>'<tr style="border-bottom:1px solid #eee"><td style="padding:6px 10px">'+c+'</td><td style="padding:6px 10px;text-align:right;font-weight:700;color:#E07B1A">'+n+'</td></tr>').join('')
-    +'</table>':'')
-
-    // Breached NCRs
-    +(breachedNcrs.length?'<h3 style="font-size:13px;margin:0 0 8px;color:#dc2626">&#9888; SLA Breaches ('+breachedNcrs.length+')</h3>'
-    +'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;margin-bottom:20px">'
-    +'<tr style="background:#fef2f2"><th style="padding:6px 10px;text-align:left;color:#6b7280">NCR ID</th><th style="padding:6px 10px;text-align:left;color:#6b7280">Customer</th><th style="padding:6px 10px;text-align:left;color:#6b7280">Days open</th><th style="padding:6px 10px;text-align:left;color:#6b7280">Issue</th></tr>'
-    +breachedNcrs.map(r=>{
-      const sla=getSlaStatus(r);
-      return '<tr style="border-bottom:1px solid #eee;background:#fef2f2"><td style="padding:6px 10px;font-family:monospace;color:#E07B1A">'+r.id+'</td>'
-        +'<td style="padding:6px 10px">'+( r.customer||'&mdash;')+'</td>'
-        +'<td style="padding:6px 10px;font-weight:700;color:#dc2626">'+sla.days+'d</td>'
-        +'<td style="padding:6px 10px;color:#6b7280">'+(r.issue||'&mdash;').slice(0,40)+'</td></tr>';
-    }).join('')
-    +'</table>':'<p style="color:#22c55e;font-size:13px">&#10003; No SLA breaches at this time.</p>')
-
-    +'</div>'
-    +'<div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb">'
-    +'Solidcor NCR Hub &middot; Weekly Executive Report &middot; '+(manual?'Sent manually':'Automated')+' &middot; '+now.toLocaleString('en-GB')
-    +'</div></div>';
-
-  await sendNcrEmail(toEmail,'[Solidcor] Weekly NCR Report &mdash; '+slaPct+'% SLA &mdash; '+allOpen.length+' open',html);
-  if(manual)showToast('&#10003; Weekly report sent to '+toEmail);
+  const body=lines.join('\n');
+  await sendNcrEmail(toEmail,'[Solidcor] Weekly NCR Report - '+slaPct+'% SLA - '+allOpen.length+' open',body);
+  if(manual)showToast('Weekly report sent to '+toEmail);
 }
 // ═══════════════════════════════════════════════════════════════
 let _normaliseGroups = [];
@@ -5011,7 +4957,7 @@ async function sendNcrEmail(toEmails,subject,bodyHtml){
     const emails=(toEmails||'').split(',').map(e=>e.trim()).filter(Boolean);
     for(const to of emails){
       await emailjs.send(s.ejs_service,s.ejs_template,{
-        to_email:to,subject,html_body:bodyHtml,reply_to:'quality@solidcor.co.uk'
+        to_email:to,subject,html_content:bodyHtml,reply_to:'quality@solidcor.co.uk'
       });
     }
     return true;
@@ -5269,7 +5215,7 @@ async function sendTestEmail(){
   try{
     emailjs.init({publicKey:s.ejs_pubkey});
     await emailjs.send(s.ejs_service, s.ejs_template, {
-      to_email:to, subject:'[Solidcor] Test email from NCR Hub', html_body:html, reply_to:'noreply@solidcor.co.uk'
+      to_email:to, subject:'[Solidcor] Test email from NCR Hub', html_content:html, reply_to:'noreply@solidcor.co.uk'
     });
     st.style.color='var(--green)'; st.textContent='✓ Test email sent to '+to;
   }catch(e){
