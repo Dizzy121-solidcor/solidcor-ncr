@@ -5018,6 +5018,15 @@ async function submitExtNcr(){
   }catch(e){err.textContent='⚠️ Error: '+e.message;console.error('submitExtNcr error:',e);}
 }
 
+async function sendNcrAlertEmail(ncr){
+  const s=loadSettings();
+  if(!s.notify_email) return;
+  const ok=await callEmailFunction({type:'alert',ncr,notify_email:s.notify_email});
+  if(!ok) await sendNcrEmail(s.notify_email,
+    `[NCR Alert] ${ncr.type==='external'?'External':'Internal'} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`,
+    buildAlertHtml(ncr,true));
+}
+
 async function sendCustomerSubmissionEmail(ncr){
   if(!ncr.customer_email) return;
   const s = loadSettings();
