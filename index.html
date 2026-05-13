@@ -2295,6 +2295,7 @@ function openDetail(id){
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openStatusModal('${id}')">Update status</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddReturn(); document.getElementById('retNcr').value='${id}'; document.getElementById('retCustomer').value='${esc(r.customer)}'; document.getElementById('retDoorRef').value='${esc(r.door_ref||'')}'">↩️ Log return</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="generateDoorQR('${esc(r.door_ref||r.id)}','${esc(r.so||'')}','${esc(r.customer)}')">🔗 Door QR</button>
+    <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="exportNcrPdf('${id}')">📄 Export PDF</button>
     ${currentUser?.isAdmin ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--accent);border-color:var(--accent)" onclick="openEditNcr('${id}')">✏️ Edit</button>` : ''}
     ${r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteNcr('${id}')">🗑 Delete</button>` : ''}
@@ -4546,6 +4547,177 @@ async function callEmailFunction(payload){
   }
 }
 
+
+function exportNcrPdf(id){
+  const r = ncrRecords.find(x=>x.id===id);
+  if(!r){ showToast('⚠️ NCR not found'); return; }
+
+  const isExternal = r.type==='external' || r.source==='external_portal' || r.source==='external_form';
+  const ncrActions = actions.filter(a=>(a.ncr_id||a.ncrId)===id);
+  const statusColour = r.status==='closed'?'#22c55e':r.status==='inprogress'?'#f59e0b':'#ef4444';
+
+  const field = (label,val,span=false) => val ? `
+    <tr>
+      <td style="padding:7px 12px;background:#f8f9fa;font-weight:600;font-size:12px;color:#374151;width:${span?'auto':'160px'};border-bottom:1px solid #e5e7eb;white-space:nowrap">${label}</td>
+      <td style="padding:7px 12px;font-size:13px;color:#111827;border-bottom:1px solid #e5e7eb${span?';colspan:3':''}}">${val}</td>
+    </tr>` : '';
+
+  const html = `<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>NCR ${r.id} — Solidcor</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#111827;background:#fff;font-size:13px}
+    .page{max-width:780px;margin:0 auto;padding:20px}
+    .header{border-top:5px solid #E07B1A;background:#111316;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:0}
+    .brand{color:#E07B1A;font-weight:800;font-size:20px;font-family:monospace;letter-spacing:.03em}
+    .doc-title{color:#9ca3af;font-size:13px}
+    .ncr-id{font-family:monospace;font-size:22px;font-weight:800;color:#E07B1A}
+    .meta-bar{background:#f3f4f6;border:1px solid #e5e7eb;padding:10px 16px;display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;border-top:none}
+    .meta-item{font-size:12px;color:#6b7280}
+    .meta-item strong{color:#111827;display:block;font-size:13px}
+    .status-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${statusColour}20;color:${statusColour};border:1px solid ${statusColour}40}
+    .type-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${isExternal?'#dbeafe':'#fef3c7'};color:${isExternal?'#1d4ed8':'#92400e'};border:1px solid ${isExternal?'#93c5fd':'#fde68a'};margin-right:6px}
+    .section{margin-bottom:16px}
+    .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;padding:8px 12px;background:#f3f4f6;border:1px solid #e5e7eb;border-bottom:none}
+    table{width:100%;border-collapse:collapse;border:1px solid #e5e7eb}
+    .issue-box{border:1px solid #e5e7eb;padding:12px;font-size:13px;line-height:1.6;background:#fafafa;min-height:60px}
+    .rca-box{border:1px solid #e5e7eb;padding:12px;font-size:13px;line-height:1.6;background:#f0fdf4;min-height:50px;color:#166534}
+    .action-row{padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;display:flex;gap:12px;align-items:flex-start}
+    .action-dot{width:8px;height:8px;border-radius:50%;background:#E07B1A;margin-top:4px;flex-shrink:0}
+    .sig-box{border:1px solid #e5e7eb;height:50px;background:#fafafa}
+    .footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between}
+    @media print{
+      @page{size:A4;margin:12mm}
+      .no-print{display:none!important}
+      .page{padding:0}
+      .header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
+  </style>
+</head><body>
+<div class="page">
+
+  <!-- Print button (hidden when printing) -->
+  <div class="no-print" style="text-align:right;margin-bottom:12px">
+    <button onclick="window.print()" style="background:#E07B1A;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">📄 Save as PDF / Print</button>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="brand">SOLIDCOR</div>
+      <div class="doc-title">Non-Conformance Report</div>
+    </div>
+    <div style="text-align:right">
+      <div class="ncr-id">${r.id}</div>
+      <div style="margin-top:4px">
+        <span class="type-badge">${isExternal?'External':'Internal'}</span>
+        <span class="status-badge">${r.status?.toUpperCase()||'OPEN'}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Meta bar -->
+  <div class="meta-bar">
+    <div class="meta-item"><strong>${r.date||'—'}</strong>Date raised</div>
+    <div class="meta-item"><strong>${r.customer||'—'}</strong>Customer</div>
+    ${r.so?`<div class="meta-item"><strong>${r.so}</strong>Sales order</div>`:''}
+    ${r.door_ref?`<div class="meta-item"><strong>${r.door_ref}</strong>Door reference</div>`:''}
+    ${r.ncr_type?`<div class="meta-item"><strong>${r.ncr_type}</strong>NCR type</div>`:''}
+    ${r.dept?`<div class="meta-item"><strong>${r.dept}</strong>Department</div>`:''}
+    ${r.raised_by?`<div class="meta-item"><strong>${r.raised_by}</strong>Raised by</div>`:''}
+  </div>
+
+  <!-- Details section -->
+  <div class="section">
+    <div class="section-title">NCR Details</div>
+    <table>
+      ${field('Customer',r.customer)}
+      ${field('Sales order',r.so)}
+      ${field('Door reference',r.door_ref)}
+      ${field('Door type / range',r.door_type)}
+      ${field('Door style',r.door_style)}
+      ${field('Internal colour',r.colour_int)}
+      ${field('External colour',r.colour_ext)}
+      ${field('NCR type',r.ncr_type)}
+      ${field('Error type',r.error_type)}
+      ${field('Department / area',r.dept)}
+      ${field('Category',r.category)}
+      ${field('Action required',r.action)}
+      ${r.cost?field('Cost','£'+(r.cost||0).toFixed(2)):''}
+      ${r.contact_phone?field('Contact number',r.contact_phone):''}
+      ${r.project_ref?field('Project reference',r.project_ref):''}
+    </table>
+  </div>
+
+  <!-- Issue description -->
+  <div class="section">
+    <div class="section-title">Issue description</div>
+    <div class="issue-box">${(r.issue||'').replace(/\n/g,'<br>')}</div>
+  </div>
+
+  ${r.root_cause?`
+  <!-- Root cause -->
+  <div class="section">
+    <div class="section-title">Root cause analysis</div>
+    <div class="rca-box">${(r.root_cause||'').replace(/\n/g,'<br>')}</div>
+  </div>`:''}
+
+  ${r.corrective?`
+  <!-- Corrective action -->
+  <div class="section">
+    <div class="section-title">Corrective / rectification action</div>
+    <div class="issue-box" style="background:#eff6ff;color:#1e40af">${(r.corrective||'').replace(/\n/g,'<br>')}</div>
+  </div>`:''}
+
+  ${ncrActions.length?`
+  <!-- Actions log -->
+  <div class="section">
+    <div class="section-title">Actions taken (${ncrActions.length})</div>
+    <div style="border:1px solid #e5e7eb">
+      ${ncrActions.map(a=>`<div class="action-row">
+        <div class="action-dot"></div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:12px">${a.description||a.desc||''}</div>
+          <div style="color:#6b7280;font-size:11px;margin-top:2px">${a.assigned||''} · ${a.due_date||a.due||''} · <span style="text-transform:capitalize">${a.status||''}</span></div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`:''}
+
+  <!-- Signatures -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+    <div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600">Raised by</div>
+      <div class="sig-box"></div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">${r.raised_by||'__________________'}</div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600">Reviewed by</div>
+      <div class="sig-box"></div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">__________________</div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600">Closed by / date</div>
+      <div class="sig-box"></div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">${r.completed||'__________________'}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Solidcor Quality Management · Non-Conformance Report</span>
+    <span>Generated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})} · ${r.id}</span>
+  </div>
+
+</div>
+</body></html>`;
+
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  // Auto-trigger print dialog after content loads
+  w.onload = () => setTimeout(()=>w.print(), 400);
+}
 
 async function deleteNcr(id){
   if(currentUser?.role!=='superadmin'){showToast('⚠️ Superadmin only');return;}
