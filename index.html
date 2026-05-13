@@ -838,6 +838,11 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
             <div><label style="font-size:11px;color:var(--muted);font-family:var(--mono)">EmailJS Public Key</label>
               <input type="text" id="ejs_pubkey" placeholder="e.g. aBcDeFgHiJ..." style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:12px;margin-top:3px"></div>
           </div>
+          <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="top-btn ghost" onclick="sendTestEmail()" style="font-size:12px">📧 Send test email</button>
+            <input type="email" id="testEmailAddr" placeholder="your@email.com" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:12px;width:200px">
+            <span id="testEmailStatus" style="font-size:11px;font-family:var(--mono)"></span>
+          </div>
         </div>
 
         <!-- Email routing by action type -->
@@ -4529,24 +4534,79 @@ function populateSettings(){
 }
 
 // ═══════════════════════════════════════════════════════
-// EMAIL — all sent via Netlify function (no login needed)
+// EMAIL — Netlify function with EmailJS fallback
 // ═══════════════════════════════════════════════════════
 async function callEmailFunction(payload){
   try{
-    const r = await fetch('/.netlify/functions/send-ncr-email',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    const r=await fetch('/.netlify/functions/send-ncr-email',{
+      method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    const data = await r.json().catch(()=>({}));
-    if(!r.ok) console.warn('Email function error:',data);
-    return r.ok;
-  }catch(e){
-    console.warn('Email function unreachable:',e.message);
-    return false;
-  }
+    if(r.ok){const d=await r.json().catch(()=>({}));return d.ok!==false;}
+    console.warn('Email function returned',r.status);return false;
+  }catch(e){console.warn('Email function unreachable:',e.message);return false;}
 }
 
+async function sendNcrEmail(toEmails,subject,bodyHtml){
+  const s=loadSettings();
+  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey)return false;
+  try{
+    emailjs.init({publicKey:s.ejs_pubkey});
+    const emails=(toEmails||'').split(',').map(e=>e.trim()).filter(Boolean);
+    for(const to of emails){
+      await emailjs.send(s.ejs_service,s.ejs_template,{
+        to_email:to,subject,html_body:bodyHtml,reply_to:'quality@solidcor.co.uk'
+      });
+    }
+    return true;
+  }catch(e){console.error('EmailJS error:',e);return false;}
+}
+
+async function sendCustomerSubmissionEmail(ncr){
+  const s=loadSettings();
+  if(!ncr.customer_email&&!s.notify_email)return;
+  const ok=await callEmailFunction({type:'submission',ncr,customer_email:ncr.customer_email||null,notify_email:s.notify_email||null});
+  if(!ok){
+    if(ncr.customer_email)await sendNcrEmail(ncr.customer_email,`[Solidcor] NCR Received — ${ncr.id}`,buildAlertHtml(ncr,false));
+    if(s.notify_email)await sendNcrEmail(s.notify_email,`[NCR Alert] ${ncr.type==='external'?'External':'Internal'} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`,buildAlertHtml(ncr,true));
+  }
+}
+async function sendCustomerResolutionEmail(ncr,res){
+  if(!ncr.customer_email)return;
+  const ok=await callEmailFunction({type:'resolution',ncr,resolution:res,customer_email:ncr.customer_email});
+  if(!ok)await sendNcrEmail(ncr.customer_email,`[Solidcor] NCR Resolved — ${ncr.id}`,`<p>NCR ${ncr.id} resolved. Action: ${res||ncr.corrective||'—'}</p>`);
+}
+async function sendNcrAlertEmail(ncr){
+  const s=loadSettings();if(!s.notify_email)return;
+  const ok=await callEmailFunction({type:'alert',ncr,notify_email:s.notify_email});
+  if(!ok)await sendNcrEmail(s.notify_email,`[NCR Alert] ${ncr.type==='external'?'External':'Internal'} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`,buildAlertHtml(ncr,true));
+}
+async function notifyComponentPicker(ncrId,componentName,qty){
+  const cfg=loadPickerConfig();if(!cfg.picker_email)return;
+  const ok=await callEmailFunction({type:'picker',ncr:{id:ncrId},component:componentName,qty,picker_email:cfg.picker_email});
+  if(!ok)await sendNcrEmail(cfg.picker_email,`[Solidcor] Pick required — ${componentName} for NCR ${ncrId}`,`<p>Component pick required: <strong>${componentName}</strong> x${qty} for NCR ${ncrId}</p>`);
+}
+
+function buildAlertHtml(ncr,isAlert){
+  const t=ncr.type==='external'?'External':'Internal';
+  const src=ncr.source==='external_portal'?' (customer portal)':ncr.source==='external_form'?' (ext. form)':'';
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:14px 20px"><span style="color:#E07B1A;font-weight:800;font-family:monospace">SOLIDCOR</span><span style="color:#7A7E8A;font-size:12px;margin-left:10px">${isAlert?'NCR Alert'+src:'Quality Assurance'}</span></div>
+    <div style="padding:20px">
+      <h2 style="font-size:17px;margin:0 0 12px">${isAlert?t+' NCR Raised — ':'NCR Received — '}<span style="color:#E07B1A">${ncr.id}</span></h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:130px">Customer</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.customer||'—'}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Date</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Raised by</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.raised_by||'—'}${ncr.contact_phone?' · '+ncr.contact_phone:''}</td></tr>
+        ${ncr.door_ref?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Door ref</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>`:''}
+        ${ncr.so?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Sales order</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.so}</td></tr>`:''}
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Issue</td><td style="padding:6px 10px">${ncr.issue||'—'}</td></tr>
+      </table>
+      ${!isAlert?`<p style="font-size:13px;color:#666;margin-top:14px">Please quote <strong>${ncr.id}</strong> in all correspondence. Our team will be in touch within 5 working days.</p>`:''}
+    </div>
+    <div style="padding:10px 20px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor NCR Hub · ${new Date().toLocaleString('en-GB')}</div>
+  </div>`;
+}
 
 function exportNcrPdf(id){
   const r = ncrRecords.find(x=>x.id===id);
@@ -4733,6 +4793,32 @@ async function deleteNcr(id){
     showToast(`✓ NCR ${id} deleted`);
   }catch(e){
     showToast('⚠️ Delete failed: '+e.message);
+  }
+}
+
+async function sendTestEmail(){
+  const to = document.getElementById('testEmailAddr').value.trim();
+  const st = document.getElementById('testEmailStatus');
+  if(!to){ st.style.color='var(--red)'; st.textContent='⚠️ Enter an email address first'; return; }
+  const s = loadSettings();
+  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey){
+    st.style.color='var(--red)'; st.textContent='⚠️ EmailJS credentials not saved — click Save settings first'; return;
+  }
+  st.style.color='var(--muted)'; st.textContent='Sending…';
+  const html = `<div style="font-family:Arial,sans-serif;padding:20px;border-top:4px solid #E07B1A">
+    <h2 style="color:#E07B1A">✓ Solidcor NCR Hub — Test Email</h2>
+    <p>EmailJS is configured correctly. This is a test from the NCR Hub settings.</p>
+    <p style="font-size:12px;color:#666;margin-top:12px">Sent: ${new Date().toLocaleString('en-GB')}</p>
+  </div>`;
+  try{
+    emailjs.init({publicKey:s.ejs_pubkey});
+    await emailjs.send(s.ejs_service, s.ejs_template, {
+      to_email:to, subject:'[Solidcor] Test email from NCR Hub', html_body:html, reply_to:'noreply@solidcor.co.uk'
+    });
+    st.style.color='var(--green)'; st.textContent='✓ Test email sent to '+to;
+  }catch(e){
+    st.style.color='var(--red)'; st.textContent='⚠️ Failed: '+( e?.text||e?.message||JSON.stringify(e));
+    console.error('EmailJS test error:', e);
   }
 }
 
