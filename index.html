@@ -3557,7 +3557,8 @@ function renderDeliveries(){
   const search=(document.getElementById('delSearch')?.value||'').toLowerCase();
   const from=document.getElementById('delFrom')?.value||'';
   const to=document.getElementById('delTo')?.value||'9999-12-31';
-  let filtered=deliveries.filter(d=>d.delivery_date); // always exclude no-date entries
+  const validDate=d=>d.delivery_date&&d.delivery_date!=='—'&&d.delivery_date.match(/^\d{4}-\d{2}-\d{2}/);
+  let filtered=deliveries.filter(validDate);
   if(search) filtered=filtered.filter(d=>(d.customer||'').toLowerCase().includes(search)||(d.door_ref||'').toLowerCase().includes(search));
   if(from) filtered=filtered.filter(d=>!d.delivery_date||d.delivery_date>=from);
   if(to!=='9999-12-31') filtered=filtered.filter(d=>!d.delivery_date||d.delivery_date<=to);
