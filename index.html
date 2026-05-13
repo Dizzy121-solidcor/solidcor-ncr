@@ -357,12 +357,24 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
   <div id="main">
     <div id="topbar">
       <div class="top-title" id="topTitle">Dashboard</div>
+      <div style="position:relative;flex:1;max-width:320px;margin:0 12px">
+        <input type="text" id="globalSearch" placeholder="🔍 Search NCRs…" autocomplete="off"
+          oninput="globalSearchInput(this.value)" onkeydown="globalSearchKey(event)"
+          onfocus="globalSearchInput(this.value)"
+          onblur="setTimeout(()=>closeGlobalSearch(),200)"
+          style="width:100%;padding:7px 12px;border:1px solid var(--border2);border-radius:20px;background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;outline:none">
+        <div id="globalSearchDrop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:1000;max-height:360px;overflow-y:auto"></div>
+      </div>
       <button class="top-btn ghost" id="topShareBtn" style="display:none" onclick="copyNCRLink()">🔗 Share link</button>
       <button class="top-btn primary" onclick="openRaiseNCR()">🔴 Raise NCR</button>
     </div>
 
     <!-- DASHBOARD -->
     <div class="view active" id="view-dashboard">
+      <div id="slaOverdueBanner" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:var(--r);padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="font-size:13px;color:var(--red);font-weight:600" id="slaOverdueText"></div>
+        <button class="top-btn ghost" style="font-size:11px;color:var(--red);border-color:var(--red)" onclick="showView('slatracker')">View SLA tracker →</button>
+      </div>
       <div class="stat-grid" id="dashStats"></div>
 
       <!-- External / Internal split -->
@@ -411,6 +423,13 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
 
+      <!-- Pinned NCRs -->
+      <div id="pinnedSection" style="display:none;margin-bottom:14px">
+        <div class="detail-card" style="border-left:3px solid var(--accent)">
+          <h4 style="margin-bottom:10px">📌 Pinned NCRs</h4>
+          <div id="pinnedList"></div>
+        </div>
+      </div>
       <!-- Daily summary -->
       <div class="detail-card" style="margin-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -903,6 +922,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <button class="top-btn primary" onclick="openNormaliseCustomers()">Run normalisation</button>
         </div>
 
+        <!-- Scheduled customer reports -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">📨 Scheduled customer reports</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Auto-email each customer their NCR summary on the first Monday of every month. Requires delivery schedule for FTR%.</div>
+          <input type="email" id="customer_report_cc" placeholder="BCC address (e.g. quality@solidcor.co.uk)"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+          <button class="top-btn ghost" onclick="sendAllCustomerReportsNow()" style="font-size:12px">Send all customer reports now</button>
+        </div>
+
         <!-- Weekly exec report -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">📈 Weekly exec report</div>
@@ -1027,7 +1055,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 
         <div style="display:flex;gap:8px">
           <button class="top-btn primary" onclick="saveSettings()">💾 Save settings</button>
-          <button class="top-btn ghost" onclick="testEmail()">📧 Send test email</button>
+          <button class="top-btn ghost" onclick="sendTestEmail()">📧 Send test email</button>
           <button class="top-btn ghost" id="btnChangePinSettings" style="display:none" onclick="openModal('changePinModal')">🔑 Change my PIN</button>
         </div>
         <div id="settingsStatus" style="margin-top:10px;font-size:12px;font-family:var(--mono);color:var(--green)"></div>
@@ -1400,6 +1428,16 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     <div class="form-row"><label>Raised by <span class="req-star">*</span></label>
       <input type="text" id="ncrRaisedBy" placeholder="Your name" readonly style="background:var(--faint)">
     </div>
+    <div class="form-row"><label>Assigned to <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <select id="ncrAssignedTo" style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
+        <option value="">— unassigned —</option>
+      </select>
+    </div>
+    <!-- NCR Templates -->
+    <div class="form-row">
+      <label style="margin-bottom:6px;display:block">Quick templates</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="ncrTemplateButtons"></div>
+    </div>
     <div class="modal-actions">
       <button class="top-btn ghost" onclick="closeRaiseModal()">Cancel</button>
       <button class="top-btn primary" id="submitNcrBtn" onclick="submitNCR()">Submit NCR</button>
@@ -1752,8 +1790,7 @@ function showOpQR(){
   const url=(s.portal_url||window.location.origin)+'?portal=ncr';
   document.getElementById('opQrUrl').textContent=url;
   const qrEl=document.getElementById('opQrCanvas');
-  qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${encodeURIComponent(url)}"
-    style="border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.3);width:220px;height:220px">`;
+  qrEl.innerHTML='<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data='+encodeURIComponent(url)+'" style="border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.3);width:220px;height:220px">';
   openModal('opQrModal');
 }
 
@@ -2078,12 +2115,18 @@ async function init(){
   renderActions();
   renderReturns();
   updateBadges();
-  // Auto-send daily stock report if not sent today
+
+  // Load shared data from Supabase in background
+  loadSettingsFromDB().then(()=>{ populateSettings(); updatePortalView(); });
+  loadCustomersFromDB().then(()=>{ renderCustomerList(); populateCrCustomers(); });
+  loadDeliveriesFromDB();
+  loadDispatchFromDB();
+
+  // Auto emails
   setTimeout(checkDailyStockReport, 4000);
-  // Auto-send weekly exec report if Monday
-  setTimeout(checkWeeklyReport, 5000);
-  // Load delivery schedule
-  loadDeliveries();
+  setTimeout(checkDailyRftReport, 5500);
+  setTimeout(checkWeeklyReport, 7000);
+  setTimeout(checkMonthlyCustomerReports, 9000);
 }
 
 // ── View switching ────────────────────────────────────────────────
@@ -2206,6 +2249,8 @@ function renderDashboard(){
     </div>
   `;
 
+  renderOverdueBanner();
+  renderPinnedNcrs();
   renderDailyPanel('dashDailySummary');
 
   // ── External panel ────────────────────────────────
@@ -2424,9 +2469,13 @@ function renderTable(type){
 
   if(type==='all'){
     document.getElementById('allCount').textContent = rows.length+' records';
-    tbody.innerHTML = rows.map(r=>`
-      <tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')">
-        <td class="ncr-num">${esc(r.id)}</td>
+    tbody.innerHTML = rows.map(r=>{
+      const sla=r.status!=='closed'?getSlaStatus(r):null;
+      const bc=r.status==='closed'?'#22c55e':sla?.status==='breached'||sla?.status==='contact_breach'?'#ef4444':sla?.status==='warning'?'#f59e0b':'#3b82f6';
+      const pinned=isPinned(r.id);
+      return `<tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')" style="border-left:3px solid ${bc}">
+        <td onclick="event.stopPropagation()" style="padding:4px 8px;width:28px"><input type="checkbox" class="bulk-cb" onchange="toggleBulkSelect('${r.id}',this)" ${_bulkSelected.has(r.id)?'checked':''}></td>
+        <td class="ncr-num">${pinned?'📌 ':''}<span style="color:var(--accent)">${esc(r.id)}</span></td>
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
@@ -2436,14 +2485,16 @@ function renderTable(type){
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td><span class="badge ${r.type==='external'?'b-external':'b-internal'}">${r.type}</span></td>
         <td>${statusBadge(r.status)}</td>
-      </tr>`).join('');
+      </tr>`;}).join('');
     const tot = rows.reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
     document.getElementById('tfoot-all').textContent = rows.length+' NCRs · Total cost: £'+tot.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
   }
 
   if(type==='external'){
-    tbody.innerHTML = rows.map(r=>`
-      <tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')">
+    tbody.innerHTML = rows.map(r=>{
+      const sla=r.status!=='closed'?getSlaStatus(r):null;
+      const bc=r.status==='closed'?'#22c55e':sla?.status==='breached'||sla?.status==='contact_breach'?'#ef4444':sla?.status==='warning'?'#f59e0b':'#3b82f6';
+      return `<tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')" style="border-left:3px solid ${bc}">
         <td class="ncr-num">${esc(r.id)}</td>
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
@@ -2452,13 +2503,15 @@ function renderTable(type){
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td>${statusBadge(r.status)}</td>
         <td><button class="top-btn ghost" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();openAddAction('${r.id}')">+ Action</button></td>
-      </tr>`).join('');
+      </tr>`;}).join('');
     document.getElementById('tfoot-external').textContent = rows.length+' external NCRs';
   }
 
   if(type==='internal'){
-    tbody.innerHTML = rows.map(r=>`
-      <tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')">
+    tbody.innerHTML = rows.map(r=>{
+      const sla=r.status!=='closed'?getSlaStatus(r):null;
+      const bc=r.status==='closed'?'#22c55e':sla?.status==='breached'?'#ef4444':sla?.status==='warning'?'#f59e0b':'#f97316';
+      return `<tr class="${r.legacy?'legacy':''}" onclick="openDetail('${r.id}')" style="border-left:3px solid ${bc}">
         <td class="ncr-num">${esc(r.id)}</td>
         <td class="mono">${fmtDate(r.date)}</td>
         <td style="font-weight:500">${esc(r.raised_by||r.raisedBy||'—')}</td>
@@ -2467,17 +2520,20 @@ function renderTable(type){
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td>${statusBadge(r.status)}</td>
         <td><button class="top-btn ghost" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();openAddAction('${r.id}')">+ Action</button></td>
-      </tr>`).join('');
+      </tr>`;}).join('');
     document.getElementById('tfoot-internal').textContent = rows.length+' internal NCRs';
   }
 }
 
 // ── NCR Detail ────────────────────────────────────────────────────
+let currentDetailId = null;
 function openDetail(id){
+  currentDetailId = id;
   const r = ncrRecords.find(x=>x.id===id);
   if(!r){showToast('NCR not found');return;}
   showView('detail');
   document.getElementById('detailBreadcrumb').textContent = id+' · '+r.customer;
+  const pinned=isPinned(id);
   document.getElementById('detailActions').innerHTML = `
     ${r.type==='external' && !r.customer_contacted ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:#8b5cf6;border-color:#8b5cf6" onclick="openContactedModal('${id}')">📞 Mark contacted</button>` : ''}
     ${r.type==='external' && r.customer_contacted ? `<span style="font-size:11px;color:var(--green);font-family:var(--mono);padding:5px 10px;border:1px solid rgba(34,197,94,.3);border-radius:var(--r);background:rgba(34,197,94,.08)">✓ Contacted ${r.customer_contacted.slice(0,10)}</span>` : ''}
@@ -2486,6 +2542,8 @@ function openDetail(id){
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddReturn(); document.getElementById('retNcr').value='${id}'; document.getElementById('retCustomer').value='${esc(r.customer)}'; document.getElementById('retDoorRef').value='${esc(r.door_ref||'')}'">↩️ Log return</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="generateDoorQR('${esc(r.door_ref||r.id)}','${esc(r.so||'')}','${esc(r.customer)}')">🔗 Door QR</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="exportNcrPdf('${id}')">📄 Export PDF</button>
+    <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="emailNcrPdf('${id}')">📧 Email PDF</button>
+    <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="togglePin('${id}')" title="${pinned?'Unpin':'Pin this NCR'}">${pinned?'📌 Unpin':'📌 Pin'}</button>
     ${currentUser?.isAdmin ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--accent);border-color:var(--accent)" onclick="openEditNcr('${id}')">✏️ Edit</button>` : ''}
     ${r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--muted);border-color:var(--border2)" onclick="toggleNcrType('${id}')" title="Change NCR type">⇄ ${r.type==='internal'?'Make external':'Make internal'}</button>` : ''}
@@ -2538,6 +2596,17 @@ function openDetail(id){
       <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
     </div>
 
+    <div class="detail-card">
+      <h4>💬 Comments</h4>
+      <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="commentInput" placeholder="Add a comment or note…"
+          onkeydown="if(event.key==='Enter')addComment('${id}')"
+          style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
+        <button class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
+      </div>
+    </div>
+
     <div class="detail-card" id="doorSheetCard">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <h4 style="margin:0">📎 Attachments</h4>
@@ -2574,6 +2643,7 @@ function openDetail(id){
 
   loadAuditTrail(id);
   loadNcrAttachments(id);
+  renderComments(id);
 
   document.getElementById('detailSide').innerHTML = `
     <div class="detail-card">
@@ -2995,6 +3065,8 @@ function openRaiseNCR(){
   document.querySelectorAll('.raise-fault-btn').forEach(b=>b.classList.remove('sel'));
   ncrPhotos=[];
   if(currentUser) document.getElementById('ncrRaisedBy').value=currentUser.name;
+  renderNcrTemplates();
+  populateAssignedTo();
   openModal('raiseModal');
 }
 document.getElementById('ncrAction').addEventListener('change',function(){
@@ -3116,10 +3188,8 @@ function submitNCR(){
   if(!category){showToast('⚠️ Select a fault type');resetBtn();return;}
   if(!raisedBy){showToast('⚠️ Name is required');resetBtn();return;}
 
-  const lastNum=ncrRecords.map(r=>{const m=(r.id||'').match(/NCR\d+-(\d+)/);return m?parseInt(m[1]):0;});
-  const nextNum=Math.max(0,...lastNum)+1;
-  const year=new Date().getFullYear().toString().slice(2);
-  const id=`NCR${year}-${String(nextNum).padStart(3,'0')}`;
+  const id=genNCRId(new Date().toISOString().slice(0,10));
+
 
   const action=document.getElementById('ncrAction').value;
   const newNCR={
@@ -3135,7 +3205,8 @@ function submitNCR(){
     issue, units:parseFloat(document.getElementById('ncrUnits').value)||1,
     category, dept, cost:parseFloat(document.getElementById('ncrCost').value)||0,
     transport:0, status:'open', type:'internal',
-    action, root_cause:'', corrective:'', completed:null,
+    action, assigned_to:document.getElementById('ncrAssignedTo')?.value||null,
+    root_cause:'', corrective:'', completed:null,
     legacy:false, raised_by:raisedBy, shift:currentShift
   };
 
@@ -3235,13 +3306,42 @@ function autoNormaliseCustomer(inputEl){
 // WEEKLY MANAGEMENT DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 let _mgmtWeekOffset = 0;
-const DISPATCH_KEY = 'ncr_daily_dispatch';
+const DISPATCH_KEY = 'ncr_dispatch_cache';
+let _dispatchCache = null;
 
-function getDispatchData(){ try{return JSON.parse(localStorage.getItem(DISPATCH_KEY)||'{}');}catch(e){return {};} }
-function saveDispatch(dateStr, qty){
+function getDispatchData(){
+  if(_dispatchCache) return _dispatchCache;
+  try{ _dispatchCache=JSON.parse(localStorage.getItem(DISPATCH_KEY)||'{}'); }
+  catch(e){ _dispatchCache={}; }
+  return _dispatchCache;
+}
+
+async function loadDispatchFromDB(){
+  try{
+    const rows=await sbGet('ncr_dispatch_counts','');
+    _dispatchCache={};
+    (rows||[]).forEach(r=>{ _dispatchCache[r.date]=r.count; });
+    localStorage.setItem(DISPATCH_KEY,JSON.stringify(_dispatchCache));
+  }catch(e){ getDispatchData(); }
+}
+
+async function saveDispatch(dateStr, qty){
   const d=getDispatchData();
   if(qty>0) d[dateStr]=qty; else delete d[dateStr];
+  _dispatchCache=d;
   localStorage.setItem(DISPATCH_KEY,JSON.stringify(d));
+  // Save to Supabase
+  if(qty>0){
+    await fetch(`${SURL}/rest/v1/ncr_dispatch_counts`,{
+      method:'POST',
+      headers:{...SH,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({date:dateStr,count:qty})
+    }).catch(()=>{});
+  } else {
+    await fetch(`${SURL}/rest/v1/ncr_dispatch_counts?date=eq.${dateStr}`,{
+      method:'DELETE',headers:SH
+    }).catch(()=>{});
+  }
 }
 
 function mgmtPrevWeek(){ _mgmtWeekOffset--; renderMgmtDash(); }
@@ -3544,12 +3644,20 @@ function exportSlaReport(){
 // ═══════════════════════════════════════════════════════════════
 // DELIVERY SCHEDULE — import + FTR calculation
 // ═══════════════════════════════════════════════════════════════
-const DEL_KEY='ncr_deliveries';
+const DEL_KEY='ncr_deliveries_cache';
 let deliveries=[];
 
 function loadDeliveries(){
   try{deliveries=JSON.parse(localStorage.getItem(DEL_KEY)||'[]');}
   catch(e){deliveries=[];}
+}
+
+async function loadDeliveriesFromDB(){
+  try{
+    const rows=await sbGet('ncr_delivery_schedule','order=delivery_date.asc');
+    deliveries=rows||[];
+    localStorage.setItem(DEL_KEY,JSON.stringify(deliveries));
+  }catch(e){ loadDeliveries(); }
 }
 
 function renderDeliveries(){
@@ -3615,7 +3723,7 @@ function renderDeliveries(){
 function importDeliveries(event){
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
       const ws=wb.Sheets[wb.SheetNames[0]];
@@ -3679,6 +3787,25 @@ function importDeliveries(event){
       }
 
       if(!data.length){showToast('⚠️ No data rows found — check the file has Customer and Door ID columns');return;}
+
+      // Clear old schedule and save new one to Supabase
+      showToast('Saving to database…');
+      try{
+        // Delete existing records
+        await fetch(`${SURL}/rest/v1/ncr_delivery_schedule?id=neq.PLACEHOLDER`,{
+          method:'DELETE',headers:SH
+        });
+        // Insert in batches of 50
+        for(let i=0;i<data.length;i+=50){
+          const batch=data.slice(i,i+50);
+          await fetch(`${SURL}/rest/v1/ncr_delivery_schedule`,{
+            method:'POST',
+            headers:{...SH,'Prefer':'resolution=merge-duplicates'},
+            body:JSON.stringify(batch)
+          });
+        }
+      }catch(e){ console.warn('Delivery schedule DB save failed:',e.message); }
+
       deliveries=data;
       localStorage.setItem(DEL_KEY,JSON.stringify(deliveries));
       showToast(`✓ Imported ${data.length} records from ${file.name}`);
@@ -4883,6 +5010,7 @@ async function submitExtNcr(){
   if(!issueType){err.textContent='⚠️ Please select the type of issue';return;}
   if(needsDoor&&!doorNum){err.textContent='⚠️ Door/window number is required';return;}
   if(!fault){err.textContent='⚠️ Please describe the fault';return;}
+  try{
   const now=new Date().toISOString().slice(0,10);
   const id=genNCRId(now);
   const newNCR={
@@ -4907,6 +5035,7 @@ async function submitExtNcr(){
   showToast(`✓ External NCR submitted — ${id}`);
   renderTable('all');renderTable('external');renderDashboard();updateBadges();
   setTimeout(()=>{showView('detail');openDetail(id);},100);
+  }catch(e){err.textContent='⚠️ Error: '+e.message;console.error('submitExtNcr error:',e);}
 }
 
 async function sendCustomerSubmissionEmail(ncr){
@@ -5400,9 +5529,28 @@ document.querySelectorAll('.modal-overlay').forEach(o=>{
 // ═══════════════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════════════
-const SETTINGS_KEY='ncr_settings';
-function loadSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');}catch(e){return{};}}
+const SETTINGS_KEY='ncr_settings_cache';
+let _settingsCache=null;
+
+function loadSettings(){
+  if(_settingsCache) return _settingsCache;
+  try{ _settingsCache=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}'); }
+  catch(e){ _settingsCache={}; }
+  return _settingsCache;
+}
+
+async function loadSettingsFromDB(){
+  try{
+    const rows=await sbGet('ncr_settings','id=eq.main');
+    const data=(rows&&rows[0]?.data)||{};
+    _settingsCache=data;
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify(data));
+    return data;
+  }catch(e){ return loadSettings(); }
+}
+
 function saveSettings(){
+async function saveSettings(){
   const s={
     anthropic_key:document.getElementById('ejs_anthropic_key').value.trim(),
     ejs_service:document.getElementById('ejs_service').value.trim(),
@@ -5416,6 +5564,7 @@ function saveSettings(){
     portal_url:document.getElementById('portal_url').value.trim().replace(/\/$/,''),
     picker_email:document.getElementById('picker_email').value.trim(),
     notify_email:document.getElementById('notify_email').value.trim(),
+    customer_report_cc:document.getElementById('customer_report_cc').value.trim(),
     stock_report_email:document.getElementById('stock_report_email').value.trim(),
     rft_report_email:document.getElementById('rft_report_email').value.trim(),
     weekly_report_email:document.getElementById('weekly_report_email').value.trim(),
@@ -5423,9 +5572,18 @@ function saveSettings(){
     sla_contact:parseInt(document.getElementById('sla_contact').value)||1,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
+  // Update cache immediately
+  _settingsCache=s;
   localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));
-  // Save picker config separately
   localStorage.setItem(PICKER_KEY,JSON.stringify({picker_email:s.picker_email}));
+  // Save to Supabase so all users get the same settings
+  try{
+    await fetch(`${SURL}/rest/v1/ncr_settings`,{
+      method:'POST',
+      headers:{...SH,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:'main',data:s})
+    });
+  }catch(e){ console.warn('Settings save to DB failed:',e.message); }
   const st=document.getElementById('settingsStatus');
   st.textContent='✓ Settings saved';st.style.color='var(--green)';
   setTimeout(()=>st.textContent='',2500);
@@ -5433,7 +5591,7 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','customer_report_cc','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
@@ -5743,7 +5901,365 @@ async function sendTestEmail(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CUSTOMER CONTACTED
+// GLOBAL SEARCH
+// ═══════════════════════════════════════════════════════════════
+let _gsIdx = -1;
+function globalSearchInput(val){
+  const drop=document.getElementById('globalSearchDrop');
+  if(!val||val.length<2){drop.style.display='none';return;}
+  const q=val.toLowerCase();
+  const matches=ncrRecords.filter(r=>
+    (r.id||'').toLowerCase().includes(q)||
+    (r.customer||'').toLowerCase().includes(q)||
+    (r.door_ref||'').toLowerCase().includes(q)||
+    (r.issue||'').toLowerCase().includes(q)||
+    (r.so||'').toLowerCase().includes(q)||
+    (r.raised_by||'').toLowerCase().includes(q)
+  ).slice(0,12);
+  if(!matches.length){drop.style.display='none';return;}
+  _gsIdx=-1;
+  drop.innerHTML=matches.map((r,i)=>{
+    const sla=r.status!=='closed'?getSlaStatus(r):null;
+    const bc=r.status==='closed'?'var(--green)':sla?.status==='breached'?'var(--red)':sla?.status==='warning'?'var(--amber)':'var(--accent)';
+    return `<div data-idx="${i}" onmousedown="globalSearchPick('${r.id}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid ${bc};display:flex;align-items:center;gap:10px"
+      onmouseover="this.style.background='rgba(224,123,26,.1)'" onmouseout="this.style.background=''">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700">${esc(r.id)} <span style="color:var(--muted);font-weight:400">${esc(r.customer)}</span></div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((r.issue||'').slice(0,60))}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <span class="badge ${r.type==='external'?'b-external':'b-internal'}" style="font-size:10px">${r.type}</span>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px">${r.date}</div>
+      </div>
+    </div>`;
+  }).join('');
+  drop.style.display='block';
+}
+
+function globalSearchKey(e){
+  const drop=document.getElementById('globalSearchDrop');
+  const items=drop.querySelectorAll('[data-idx]');
+  if(e.key==='ArrowDown'){e.preventDefault();_gsIdx=Math.min(_gsIdx+1,items.length-1);items.forEach((el,i)=>el.style.background=i===_gsIdx?'rgba(224,123,26,.1)':'');}
+  else if(e.key==='ArrowUp'){e.preventDefault();_gsIdx=Math.max(_gsIdx-1,-1);items.forEach((el,i)=>el.style.background=i===_gsIdx?'rgba(224,123,26,.1)':'');}
+  else if(e.key==='Enter'&&_gsIdx>=0){const el=items[_gsIdx];if(el)el.dispatchEvent(new MouseEvent('mousedown'));}
+  else if(e.key==='Escape'){closeGlobalSearch();}
+}
+
+function globalSearchPick(id){
+  document.getElementById('globalSearch').value='';
+  closeGlobalSearch();
+  showView('detail');
+  setTimeout(()=>openDetail(id),50);
+}
+
+function closeGlobalSearch(){
+  const drop=document.getElementById('globalSearchDrop');
+  if(drop) drop.style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PINNED NCRs — dashboard section
+// ═══════════════════════════════════════════════════════════════
+function renderPinnedNcrs(){
+  const pins=getPins();
+  const sec=document.getElementById('pinnedSection');
+  const list=document.getElementById('pinnedList');
+  if(!sec||!list) return;
+  const pinned=ncrRecords.filter(r=>pins.has(r.id));
+  if(!pinned.length){sec.style.display='none';return;}
+  sec.style.display='block';
+  list.innerHTML=pinned.map(r=>{
+    const sla=r.status!=='closed'?getSlaStatus(r):null;
+    const bc=r.status==='closed'?'var(--green)':sla?.status==='breached'||sla?.status==='contact_breach'?'var(--red)':sla?.status==='warning'?'var(--amber)':'#3b82f6';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="showView('detail');openDetail('${r.id}')">
+      <div style="width:4px;height:36px;background:${bc};border-radius:2px;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700">${r.id}</div>
+        <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.customer)} — ${esc((r.issue||'').slice(0,50))}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        ${statusBadge(r.status)}
+        ${sla?`<div style="font-size:10px;font-family:var(--mono);color:${bc};margin-top:2px">${sla.label}</div>`:''}
+      </div>
+      <button class="top-btn ghost" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();togglePin('${r.id}')">Unpin</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EMAIL NCR PDF
+// ═══════════════════════════════════════════════════════════════
+async function emailNcrPdf(id){
+  const r=ncrRecords.find(x=>x.id===id);
+  if(!r){showToast('NCR not found');return;}
+  const to=prompt('Send PDF to email address:',r.customer_email||'');
+  if(!to||!to.includes('@')) return;
+  const s=loadSettings();
+  if(!s.ejs_service){showToast('⚠️ Configure EmailJS in Settings first');return;}
+  const html=`<div style="font-family:Arial,sans-serif;max-width:600px">
+    <div style="background:#111316;padding:14px 20px"><span style="color:#E07B1A;font-weight:800;font-family:monospace">SOLIDCOR</span></div>
+    <div style="padding:20px">
+      <h2 style="color:#E07B1A">NCR Report — ${r.id}</h2>
+      <p>Please find below the details of NCR <strong>${r.id}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:140px">Customer</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.customer||'—'}</td></tr>
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Date raised</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.date}</td></tr>
+        ${r.door_ref?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Door ref</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.door_ref}</td></tr>`:''}
+        ${r.so?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Sales order</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.so}</td></tr>`:''}
+        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Issue</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.issue||'—'}</td></tr>
+        ${r.root_cause?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Root cause</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.root_cause}</td></tr>`:''}
+        ${r.corrective?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Action taken</td><td style="padding:6px 10px">${r.corrective}</td></tr>`:''}
+      </table>
+      <p style="color:#666;font-size:12px;margin-top:16px">Reference: <strong>${r.id}</strong></p>
+    </div>
+    <div style="padding:10px 20px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor NCR Hub · ${new Date().toLocaleDateString('en-GB')}</div>
+  </div>`;
+  await sendNcrEmail(to,`[Solidcor] NCR Report — ${r.id} — ${r.customer}`,html);
+  showToast(`✓ NCR report emailed to ${to}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BULK CLOSE
+// ═══════════════════════════════════════════════════════════════
+let _bulkSelected=new Set();
+
+function toggleBulkSelect(id,cb){
+  if(cb.checked)_bulkSelected.add(id); else _bulkSelected.delete(id);
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  let bar=document.getElementById('bulkActionBar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='bulkActionBar';
+    bar.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--accent);border-radius:20px;padding:10px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 24px rgba(0,0,0,.4);z-index:900;transition:opacity .2s';
+    document.body.appendChild(bar);
+  }
+  if(_bulkSelected.size===0){bar.style.opacity='0';bar.style.pointerEvents='none';return;}
+  bar.style.opacity='1';bar.style.pointerEvents='all';
+  bar.innerHTML=`<span style="font-size:13px;font-family:var(--mono);color:var(--text)">${_bulkSelected.size} selected</span>
+    <button class="top-btn primary" style="font-size:12px" onclick="bulkCloseSelected()">✓ Close all</button>
+    <button class="top-btn ghost" style="font-size:12px;color:var(--red)" onclick="clearBulkSelection()">✕ Clear</button>`;
+}
+
+function clearBulkSelection(){
+  _bulkSelected.clear();
+  document.querySelectorAll('.bulk-cb').forEach(cb=>cb.checked=false);
+  updateBulkBar();
+}
+
+async function bulkCloseSelected(){
+  if(!_bulkSelected.size) return;
+  if(!confirm(`Close ${_bulkSelected.size} selected NCR${_bulkSelected.size!==1?'s':''}?`)) return;
+  const today=new Date().toISOString().slice(0,10);
+  for(const id of _bulkSelected){
+    const r=ncrRecords.find(x=>x.id===id);
+    if(r){
+      r.status='closed';r.completed=today;
+      await sbPatch('ncr_records',id,{status:'closed',completed:today}).catch(()=>{});
+    }
+  }
+  showToast(`✓ Closed ${_bulkSelected.size} NCR${_bulkSelected.size!==1?'s':''}`);
+  clearBulkSelection();
+  renderTable('all');renderTable('external');renderTable('internal');
+  renderDashboard();updateBadges();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEDULED CUSTOMER REPORTS — first Monday of every month
+// ═══════════════════════════════════════════════════════════════
+const CUST_REPORT_KEY='ncr_cust_report_sent';
+
+function checkMonthlyCustomerReports(){
+  const s=loadSettings();
+  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey) return;
+  const now=new Date();
+  const firstMonday=new Date(now.getFullYear(),now.getMonth(),1);
+  while(firstMonday.getDay()!==1) firstMonday.setDate(firstMonday.getDate()+1);
+  const key=firstMonday.toISOString().slice(0,10);
+  if(now.toISOString().slice(0,10)!==key) return;
+  if(localStorage.getItem(CUST_REPORT_KEY)===key) return;
+  sendAllCustomerReports(false);
+  localStorage.setItem(CUST_REPORT_KEY,key);
+}
+
+function sendAllCustomerReportsNow(){
+  const s=loadSettings();
+  if(!s.ejs_service){showToast('⚠️ Configure EmailJS in Settings first');return;}
+  sendAllCustomerReports(true);
+}
+
+async function sendAllCustomerReports(manual){
+  const s=loadSettings();
+  const now=new Date();
+  const monthStart=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const monthEnd=new Date(now.getFullYear(),now.getMonth(),0);
+  const from=monthStart.toISOString().slice(0,10);
+  const to=monthEnd.toISOString().slice(0,10);
+  const label=monthStart.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const customers=[...new Set(ncrRecords.map(r=>r.customer).filter(Boolean))];
+  let sent=0;
+  for(const customer of customers){
+    const ncrs=ncrRecords.filter(r=>r.customer===customer&&r.date>=from&&r.date<=to);
+    if(!ncrs.length) continue;
+    const custEmail=ncrs.find(r=>r.customer_email)?.customer_email||null;
+    const toAddr=[custEmail,s.customer_report_cc].filter(Boolean).join(',');
+    if(!toAddr) continue;
+    const closed=ncrs.filter(r=>r.status==='closed').length;
+    const html='<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #E07B1A">'
+      +'<div style="background:#111316;padding:14px 20px"><span style="color:#E07B1A;font-weight:800;font-family:monospace">SOLIDCOR</span>'
+      +'<span style="color:#7A7E8A;font-size:12px;margin-left:10px">Monthly NCR Summary &mdash; '+label+'</span></div>'
+      +'<div style="padding:20px">'
+      +'<h2 style="font-size:16px;margin:0 0 14px">NCR Summary for '+esc(customer)+'</h2>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">'
+      +'<tr style="background:#f3f4f6"><td style="padding:8px 10px;font-weight:600">Total NCRs</td><td style="padding:8px 10px;text-align:right;font-weight:800;color:#ef4444">'+ncrs.length+'</td></tr>'
+      +'<tr><td style="padding:8px 10px;background:#f9f9f9">Resolved</td><td style="padding:8px 10px;text-align:right;color:#22c55e;font-weight:700">'+closed+'</td></tr>'
+      +'<tr><td style="padding:8px 10px;background:#f9f9f9">Outstanding</td><td style="padding:8px 10px;text-align:right;color:#f59e0b;font-weight:700">'+(ncrs.length-closed)+'</td></tr>'
+      +'</table>'
+      +ncrs.map(r=>'<div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:8px;border-left:3px solid '+(r.status==='closed'?'#22c55e':'#ef4444')+'">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:5px">'
+        +'<span style="font-family:monospace;color:#E07B1A;font-weight:700">'+r.id+'</span>'
+        +'<span style="font-size:12px;color:'+(r.status==='closed'?'#22c55e':'#ef4444')+';font-weight:600;text-transform:capitalize">'+r.status+'</span></div>'
+        +'<div style="font-size:13px">'+esc(r.issue||'&mdash;')+'</div>'
+        +(r.root_cause?'<div style="font-size:12px;color:#666;margin-top:4px">Root cause: '+esc(r.root_cause)+'</div>':'')
+        +(r.corrective?'<div style="font-size:12px;color:#16a34a;margin-top:4px">Action: '+esc(r.corrective)+'</div>':'')
+        +'</div>').join('')
+      +'</div>'
+      +'<div style="padding:10px 20px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor Quality Team &middot; '+label+'</div></div>';
+    await sendNcrEmail(toAddr,'[Solidcor] Monthly NCR Summary &mdash; '+customer+' &mdash; '+label,html);
+    sent++;
+    if(sent<customers.length) await new Promise(r=>setTimeout(r,1500));
+  }
+  showToast('&#10003; Sent '+sent+' customer report'+(sent!==1?'s':''));
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+  if(e.key==='n'||e.key==='N') openRaiseNCR();
+  if(e.key==='/'){ e.preventDefault(); document.getElementById('globalSearch')?.focus(); }
+  if(e.key==='Escape') closeGlobalSearch();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// PIN / FAVOURITE NCRs
+// ═══════════════════════════════════════════════════════════════
+const PINS_KEY='ncr_pins';
+function getPins(){try{return new Set(JSON.parse(localStorage.getItem(PINS_KEY)||'[]'));}catch(e){return new Set();}}
+function isPinned(id){return getPins().has(id);}
+function togglePin(id){
+  const pins=getPins();
+  if(pins.has(id)){pins.delete(id);showToast('Unpinned');}
+  else{pins.add(id);showToast('📌 Pinned');}
+  localStorage.setItem(PINS_KEY,JSON.stringify([...pins]));
+  renderTable('all');renderTable('external');renderTable('internal');
+  openDetail(id);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OVERDUE SLA BANNER
+// ═══════════════════════════════════════════════════════════════
+function renderOverdueBanner(){
+  const banner=document.getElementById('slaOverdueBanner');
+  const text=document.getElementById('slaOverdueText');
+  if(!banner||!text) return;
+  const breached=ncrRecords.filter(r=>r.status!=='closed'&&(getSlaStatus(r).status==='breached'||getSlaStatus(r).status==='contact_breach'));
+  if(!breached.length){banner.style.display='none';return;}
+  banner.style.display='flex';
+  const contactBreach=breached.filter(r=>getSlaStatus(r).status==='contact_breach').length;
+  const closeBreach=breached.filter(r=>getSlaStatus(r).status==='breached').length;
+  const parts=[];
+  if(contactBreach) parts.push(`${contactBreach} not yet contacted`);
+  if(closeBreach) parts.push(`${closeBreach} past close deadline`);
+  text.textContent=`⚠️ SLA breach: ${parts.join(' · ')} — immediate attention required`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NCR TEMPLATES
+// ═══════════════════════════════════════════════════════════════
+const NCR_TEMPLATES=[
+  {label:'Wrong colour',     category:'Colour', issue:'Door/frame delivered in incorrect colour — does not match specification.'},
+  {label:'Damaged in transit',category:'Damage',issue:'Product received with damage sustained during transit/delivery.'},
+  {label:'Missing hardware', category:'Hardware/Ironmongery', issue:'Hardware items missing from delivery — not supplied as specified.'},
+  {label:'Wrong size',       category:'Sizing', issue:'Door/frame dimensions do not match order specification.'},
+  {label:'Surface defect',   category:'Surface/Finish', issue:'Surface finish defect observed — scratches/dents/marks present.'},
+  {label:'Wrong spec',       category:'Specification', issue:'Product does not conform to agreed specification.'},
+];
+
+function renderNcrTemplates(){
+  const wrap=document.getElementById('ncrTemplateButtons');
+  if(!wrap) return;
+  wrap.innerHTML=NCR_TEMPLATES.map((t,i)=>`
+    <button class="top-btn ghost" style="font-size:11px;padding:4px 10px" onclick="applyNcrTemplate(${i})">${t.label}</button>
+  `).join('');
+}
+
+function applyNcrTemplate(idx){
+  const t=NCR_TEMPLATES[idx];
+  const issueEl=document.getElementById('ncrIssue');
+  const catEl=document.getElementById('ncrCategory');
+  if(issueEl) issueEl.value=t.issue;
+  if(catEl){
+    // Try to match category
+    const opt=[...catEl.options].find(o=>o.value===t.category||o.text===t.category);
+    if(opt) catEl.value=opt.value;
+  }
+  showToast('Template applied: '+t.label);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ASSIGNED TO — populate dropdown with team members
+// ═══════════════════════════════════════════════════════════════
+async function populateAssignedTo(){
+  const sel=document.getElementById('ncrAssignedTo');
+  if(!sel) return;
+  const prev=sel.value;
+  const users=await sbGet('ncr_admin_users?select=name&active=eq.true&order=name').catch(()=>[]);
+  sel.innerHTML='<option value="">— unassigned —</option>'+
+    (users||[]).map(u=>`<option value="${esc(u.name)}"${u.name===prev?' selected':''}>${esc(u.name)}</option>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NCR COMMENTS / THREAD
+// ═══════════════════════════════════════════════════════════════
+async function loadComments(ncrId){
+  return await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`).catch(()=>[]);
+}
+
+async function addComment(ncrId){
+  const inp=document.getElementById('commentInput');
+  const text=(inp?.value||'').trim();
+  if(!text) return;
+  const comment={
+    id:'cmt_'+Date.now(),
+    ncr_id:ncrId,
+    text,
+    author:currentUser?.name||currentUser?.email||'Unknown',
+    created_at:new Date().toISOString()
+  };
+  inp.value='';
+  await sbUps('ncr_comments',comment).catch(()=>{});
+  renderComments(ncrId);
+}
+
+async function renderComments(ncrId){
+  const wrap=document.getElementById('commentsWrap');
+  if(!wrap) return;
+  const comments=await loadComments(ncrId);
+  if(!comments.length){
+    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0">No comments yet.</div>';
+    return;
+  }
+  wrap.innerHTML=comments.map(c=>`
+    <div style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:600;color:var(--accent)">${esc(c.author)}</span>
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div style="font-size:13px;line-height:1.5">${esc(c.text)}</div>
+    </div>`).join('');
+}
 // ═══════════════════════════════════════════════════════════════
 function openContactedModal(ncrId){
   document.getElementById('contactedNcrId').value=ncrId;
@@ -5775,6 +6291,19 @@ async function confirmContacted(){
   closeModal('contactedModal');
   showToast('✓ Contact confirmed — '+now.toLocaleString('en-GB',{hour:'2-digit',minute:'2-digit'}));
   openDetail(id); // refresh detail view
+}
+
+function copyPortalLink(){
+  const url=document.getElementById('portalLinkDisplay')?.textContent||'';
+  if(!url||url==='—'){showToast('⚠️ Set your Netlify URL in Settings first');return;}
+  navigator.clipboard.writeText(url).then(()=>showToast('✓ Portal link copied'));
+}
+
+function genNCRId(dateStr){
+  const lastNum=ncrRecords.map(r=>{const m=(r.id||'').match(/NCR\d+-(\d+)/);return m?parseInt(m[1]):0;});
+  const nextNum=Math.max(0,...lastNum)+1;
+  const year=(dateStr||new Date().toISOString().slice(0,10)).slice(2,4);
+  return `NCR${year}-${String(nextNum).padStart(3,'0')}`;
 }
 
 function sendResolutionEmailPrompt(ncrId){
@@ -6851,34 +7380,72 @@ const _origSubmitNcrClose = closeRaiseModal;
 // ═══════════════════════════════════════════════════════════════
 // CUSTOMERS
 // ═══════════════════════════════════════════════════════════════
-const CUSTOMERS_KEY = 'ncr_customers';
+const CUSTOMERS_KEY = 'ncr_customers_cache';
+let _customersCache = null;
 
 function loadCustomers(){
-  try{ return JSON.parse(localStorage.getItem(CUSTOMERS_KEY)||'[]'); }
-  catch(e){ return []; }
+  // Return from memory cache first for fast sync access
+  if(_customersCache) return _customersCache;
+  try{
+    const saved=JSON.parse(localStorage.getItem(CUSTOMERS_KEY)||'[]');
+    const fromNcrs=[...new Set(ncrRecords.map(r=>r.customer).filter(Boolean))];
+    _customersCache=[...new Set([...saved,...fromNcrs])].sort((a,b)=>a.localeCompare(b));
+  }catch(e){_customersCache=[];}
+  return _customersCache;
 }
-function saveCustomers(list){ localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(list)); }
 
-function addCustomer(){
+async function loadCustomersFromDB(){
+  try{
+    const rows=await sbGet('ncr_customers','order=name.asc');
+    const dbNames=(rows||[]).map(r=>r.name).filter(Boolean);
+    const fromNcrs=[...new Set(ncrRecords.map(r=>r.customer).filter(Boolean))];
+    _customersCache=[...new Set([...dbNames,...fromNcrs])].sort((a,b)=>a.localeCompare(b));
+    localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(dbNames));
+    return _customersCache;
+  }catch(e){ return loadCustomers(); }
+}
+
+async function saveCustomers(list){
+  _customersCache=[...list].sort((a,b)=>a.localeCompare(b));
+  localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(_customersCache));
+  // Sync to Supabase — upsert each name
+  for(const name of list){
+    await fetch(`${SURL}/rest/v1/ncr_customers`,{
+      method:'POST',
+      headers:{...SH,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({name})
+    }).catch(()=>{});
+  }
+}
+
+async function addCustomer(){
   const input = document.getElementById('newCustomerName');
   const name = (input?.value||'').trim();
   if(!name){ showToast('⚠️ Enter a customer name'); return; }
   const list = loadCustomers();
   if(list.includes(name)){ showToast('Already in the list'); input.value=''; return; }
-  list.push(name);
-  list.sort((a,b)=>a.localeCompare(b));
-  saveCustomers(list);
+  // Save to Supabase immediately
+  await fetch(`${SURL}/rest/v1/ncr_customers`,{
+    method:'POST',headers:{...SH,'Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({name})
+  }).catch(()=>{});
+  if(!_customersCache) _customersCache=[];
+  _customersCache.push(name);
+  _customersCache.sort((a,b)=>a.localeCompare(b));
+  localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(_customersCache));
   input.value='';
   renderCustomerList();
-  updateCustomerDatalist();
   showToast(`✓ ${name} added`);
 }
 
-function removeCustomer(name){
-  const list = loadCustomers().filter(c=>c!==name);
-  saveCustomers(list);
+async function removeCustomer(name){
+  // Remove from Supabase
+  await fetch(`${SURL}/rest/v1/ncr_customers?name=eq.${encodeURIComponent(name)}`,{
+    method:'DELETE',headers:SH
+  }).catch(()=>{});
+  if(_customersCache) _customersCache=_customersCache.filter(c=>c!==name);
+  localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(_customersCache||[]));
   renderCustomerList();
-  updateCustomerDatalist();
 }
 
 function renderCustomerList(){
