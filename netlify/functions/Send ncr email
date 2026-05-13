@@ -27,7 +27,7 @@ function sendViaEmailJS(toEmail, subject, htmlBody) {
       template_params: {
         to_email:  toEmail,
         subject:   subject,
-        html_body: htmlBody,
+        html_content: htmlBody,
         reply_to:  'quality@solidcor.co.uk'
       }
     });
