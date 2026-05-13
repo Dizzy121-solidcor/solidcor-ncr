@@ -708,6 +708,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <input type="text" id="delSearch" placeholder="Search customer or door ref…" oninput="renderDeliveries()">
         <input type="date" id="delFrom" onchange="renderDeliveries()">
         <input type="date" id="delTo" onchange="renderDeliveries()">
+        <button class="top-btn ghost" onclick="delFilterToday()" style="font-size:12px">📅 Today</button>
+        <button class="top-btn ghost" onclick="delFilterClear()" style="font-size:12px">✕ Clear</button>
         <label style="cursor:pointer;margin-left:auto">
           <input type="file" id="delImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importDeliveries(event)">
           <span class="top-btn primary">📥 Import schedule</span>
@@ -3684,6 +3686,19 @@ function importDeliveries(event){
   };
   reader.readAsArrayBuffer(file);
   event.target.value='';
+}
+
+function delFilterToday(){
+  const today=new Date().toISOString().slice(0,10);
+  document.getElementById('delFrom').value=today;
+  document.getElementById('delTo').value=today;
+  renderDeliveries();
+}
+function delFilterClear(){
+  document.getElementById('delFrom').value='';
+  document.getElementById('delTo').value='';
+  document.getElementById('delSearch').value='';
+  renderDeliveries();
 }
 
 function exportDeliveriesCsv(){
