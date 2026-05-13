@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Daily stock report — 7:00 AM UTC every day
+# 7AM UTC = 7AM in winter (GMT), 8AM in summer (BST)
+# Change to "0 6 * * *" for 7AM BST in summer
+[functions."daily-report"]
+  schedule = "0 7 * * *"
