@@ -1221,7 +1221,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     </div>
     <div class="modal-actions">
       <button class="top-btn ghost" onclick="closeRaiseModal()">Cancel</button>
-      <button class="top-btn primary" onclick="submitNCR()">Submit NCR</button>
+      <button class="top-btn primary" id="submitNcrBtn" onclick="submitNCR()">Submit NCR</button>
     </div>
   </div>
 </div>
@@ -2882,7 +2882,11 @@ async function scanDoorSheet(input){
   input.value='';
 }
 
-function submitNCR(){
+async function submitNCR(){
+  const btn=document.getElementById('submitNcrBtn');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  const resetBtn=()=>{if(btn){btn.disabled=false;btn.textContent='Submit NCR';}};
+
   const rawCustomer=document.getElementById('ncrCustomer').value.trim();
   const _custMatch=findClosestCustomer(rawCustomer);
   const customer=(_custMatch&&_custMatch.score<0.25)?_custMatch.match:titleCase(rawCustomer);
@@ -2893,12 +2897,13 @@ function submitNCR(){
   const category=category_raw==='Other'&&categoryOther?categoryOther:category_raw;
   const dept=document.getElementById('ncrDept').value;
   const raisedBy=document.getElementById('ncrRaisedBy').value.trim();
-  if(!customer){showToast('⚠️ Customer is required');return;}
-  if(!doorRef){showToast('⚠️ Door reference number is required');return;}
-  if(!issue){showToast('⚠️ Issue description is required');return;}
-  if(!dept){showToast('⚠️ Select a machine or area first');return;}
-  if(!category){showToast('⚠️ Select a fault type');return;}
-  if(!raisedBy){showToast('⚠️ Name is required');return;}
+
+  if(!customer){showToast('⚠️ Customer is required');resetBtn();return;}
+  if(!doorRef){showToast('⚠️ Door reference is required');resetBtn();return;}
+  if(!issue){showToast('⚠️ Issue description is required');resetBtn();return;}
+  if(!dept){showToast('⚠️ Select a machine or area first');resetBtn();return;}
+  if(!category){showToast('⚠️ Select a fault type');resetBtn();return;}
+  if(!raisedBy){showToast('⚠️ Name is required');resetBtn();return;}
 
   const lastNum=ncrRecords.map(r=>{const m=(r.id||'').match(/NCR\d+-(\d+)/);return m?parseInt(m[1]):0;});
   const nextNum=Math.max(0,...lastNum)+1;
@@ -2918,46 +2923,37 @@ function submitNCR(){
     colour_ext:document.getElementById('ncrColourExt').value.trim(),
     issue, units:parseFloat(document.getElementById('ncrUnits').value)||1,
     category, dept, cost:parseFloat(document.getElementById('ncrCost').value)||0,
-    transport:0, status:'open',
-    type:'internal', // always internal when raised via admin hub
+    transport:0, status:'open', type:'internal',
     action, root_cause:'', corrective:'', completed:null,
     legacy:false, raised_by:raisedBy, shift:currentShift
   };
 
   ncrRecords.unshift(newNCR);
 
-  // Save to Supabase
-  sbUps('ncr_records',newNCR).catch(e=>{
+  try{ await sbUps('ncr_records',newNCR); }
+  catch(e){
     const saved=JSON.parse(localStorage.getItem('ncr_new')||'[]');
     saved.push(newNCR);
     localStorage.setItem('ncr_new',JSON.stringify(saved));
-  });
-
-  // Save pending door sheet image if scanned
-  if(window._pendingDoorSheetImage){
-    saveDoorSheetImage(id, window._pendingDoorSheetImage);
-    window._pendingDoorSheetImage = null;
   }
 
-  // Send emails
+  if(window._pendingDoorSheetImage){
+    saveDoorSheetImage(id, window._pendingDoorSheetImage);
+    window._pendingDoorSheetImage=null;
+  }
+
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
   sendNcrAlertEmail(newNCR);
 
-  // Close modal and show success
   closeRaiseModal();
-  showToast(`✓ NCR ${id} raised successfully`);
-
+  resetBtn();
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
+  showToast(`✓ NCR ${id} raised successfully`);
   showView('detail');
-  setTimeout(()=>{
-    openDetail(id);
-    setTimeout(()=>runRCA(id, true), 600);
-  },100);
-
-  setTimeout(()=>runTaskRules(newNCR), 500);
+  setTimeout(()=>{ openDetail(id); setTimeout(()=>runRCA(id,true),600); },100);
+  setTimeout(()=>runTaskRules(newNCR),500);
 }
-
 
 // ═══════════════════════════════════════════════════════════════
 // CUSTOMER NAME NORMALISATION — fuzzy match & canonicalise
