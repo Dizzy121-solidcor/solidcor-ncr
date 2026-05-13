@@ -2882,10 +2882,10 @@ async function scanDoorSheet(input){
   input.value='';
 }
 
-async function submitNCR(){
+function submitNCR(){
   const btn=document.getElementById('submitNcrBtn');
+  if(btn&&btn.disabled) return; // prevent double submit
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
-  const resetBtn=()=>{if(btn){btn.disabled=false;btn.textContent='Submit NCR';}};
 
   const rawCustomer=document.getElementById('ncrCustomer').value.trim();
   const _custMatch=findClosestCustomer(rawCustomer);
@@ -2897,6 +2897,8 @@ async function submitNCR(){
   const category=category_raw==='Other'&&categoryOther?categoryOther:category_raw;
   const dept=document.getElementById('ncrDept').value;
   const raisedBy=document.getElementById('ncrRaisedBy').value.trim();
+
+  const resetBtn=()=>{if(btn){btn.disabled=false;btn.textContent='Submit NCR';}};
 
   if(!customer){showToast('⚠️ Customer is required');resetBtn();return;}
   if(!doorRef){showToast('⚠️ Door reference is required');resetBtn();return;}
@@ -2928,14 +2930,24 @@ async function submitNCR(){
     legacy:false, raised_by:raisedBy, shift:currentShift
   };
 
+  // Add to memory immediately
   ncrRecords.unshift(newNCR);
 
-  try{ await sbUps('ncr_records',newNCR); }
-  catch(e){
+  // Close modal and show success RIGHT AWAY — don't wait for Supabase
+  closeRaiseModal();
+  resetBtn();
+  showToast(`✓ NCR ${id} raised successfully`);
+  renderTable('all');renderTable('external');renderTable('internal');
+  renderDashboard();updateBadges();
+  showView('detail');
+  setTimeout(()=>{ openDetail(id); setTimeout(()=>runRCA(id,true),600); },100);
+
+  // Save to Supabase in background
+  sbUps('ncr_records',newNCR).catch(()=>{
     const saved=JSON.parse(localStorage.getItem('ncr_new')||'[]');
     saved.push(newNCR);
     localStorage.setItem('ncr_new',JSON.stringify(saved));
-  }
+  });
 
   if(window._pendingDoorSheetImage){
     saveDoorSheetImage(id, window._pendingDoorSheetImage);
@@ -2944,14 +2956,6 @@ async function submitNCR(){
 
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
   sendNcrAlertEmail(newNCR);
-
-  closeRaiseModal();
-  resetBtn();
-  renderTable('all');renderTable('external');renderTable('internal');
-  renderDashboard();updateBadges();
-  showToast(`✓ NCR ${id} raised successfully`);
-  showView('detail');
-  setTimeout(()=>{ openDetail(id); setTimeout(()=>runRCA(id,true),600); },100);
   setTimeout(()=>runTaskRules(newNCR),500);
 }
 
