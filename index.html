@@ -1155,6 +1155,27 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
   </div>
 </div>
 
+<!-- CUSTOMER CONTACTED MODAL -->
+<div class="modal-overlay hidden" id="contactedModal">
+  <div class="modal" style="width:min(480px,96vw)">
+    <h3>📞 Confirm customer contact</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Record that you have contacted the customer regarding this NCR. This satisfies the Stage 1 SLA.</p>
+    <input type="hidden" id="contactedNcrId">
+    <div class="form-row">
+      <label>Contact method / notes <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <textarea id="contactedNotes" rows="3" placeholder="e.g. Called customer at 09:15, left voicemail. Sent email to john@customer.com confirming NCR raised and next steps…"
+        style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;font-family:inherit;box-sizing:border-box"></textarea>
+    </div>
+    <div style="background:var(--surface);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:16px">
+      Will record: <strong style="color:var(--text)" id="contactedPreview"></strong>
+    </div>
+    <div class="modal-actions">
+      <button class="top-btn ghost" onclick="closeModal('contactedModal')">Cancel</button>
+      <button class="top-btn primary" onclick="confirmContacted()">✓ Confirm contacted</button>
+    </div>
+  </div>
+</div>
+
 <!-- NCR IMPORT MODAL -->
 <div class="modal-overlay hidden" id="importModal">
   <div class="modal" style="width:min(700px,96vw);max-height:90vh;display:flex;flex-direction:column">
@@ -2456,6 +2477,8 @@ function openDetail(id){
   showView('detail');
   document.getElementById('detailBreadcrumb').textContent = id+' · '+r.customer;
   document.getElementById('detailActions').innerHTML = `
+    ${r.type==='external' && !r.customer_contacted ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:#8b5cf6;border-color:#8b5cf6" onclick="openContactedModal('${id}')">📞 Mark contacted</button>` : ''}
+    ${r.type==='external' && r.customer_contacted ? `<span style="font-size:11px;color:var(--green);font-family:var(--mono);padding:5px 10px;border:1px solid rgba(34,197,94,.3);border-radius:var(--r);background:rgba(34,197,94,.08)">✓ Contacted ${r.customer_contacted.slice(0,10)}</span>` : ''}
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddAction('${id}')">+ Action</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openStatusModal('${id}')">Update status</button>
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="openAddReturn(); document.getElementById('retNcr').value='${id}'; document.getElementById('retCustomer').value='${esc(r.customer)}'; document.getElementById('retDoorRef').value='${esc(r.door_ref||'')}'">↩️ Log return</button>
@@ -2476,6 +2499,23 @@ function openDetail(id){
       ${r.action?`<div style="margin-top:8px;padding:10px;background:rgba(224,123,26,.06);border-left:2px solid var(--accent);font-size:12px;border-radius:var(--r)">${esc(r.action)}</div>`:''}
     </div>
     ${r.corrective?`<div class="detail-card"><h4>Corrective actions (from log)</h4><p style="font-size:13px;color:var(--text)">${esc(r.corrective)}</p></div>`:''}
+    ${r.type==='external'?`
+    <div class="detail-card" style="border-left:3px solid ${r.customer_contacted?'var(--green)':'#8b5cf6'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <h4 style="margin:0 0 4px;color:${r.customer_contacted?'var(--green)':'#8b5cf6'}">
+            ${r.customer_contacted?'✓ Customer contacted':'📞 Customer contact (Stage 1 SLA)'}
+          </h4>
+          ${r.customer_contacted?`
+          <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">
+            ${esc(r.customer_contacted)} · by ${esc(r.contact_confirmed_by||'—')}
+          </div>
+          ${r.contact_notes?`<div style="font-size:13px;margin-top:6px;color:var(--text)">${esc(r.contact_notes)}</div>`:''}`
+          :`<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">Not yet confirmed — target within ${loadSettings().sla_contact||1} day</div>`}
+        </div>
+        ${!r.customer_contacted?`<button class="top-btn ghost" style="font-size:12px;color:#8b5cf6;border-color:#8b5cf6" onclick="openContactedModal('${id}')">📞 Mark as contacted</button>`:''}
+      </div>
+    </div>`:''}
     <div class="detail-card">
       <h4>Actions (${ncrActs.length})</h4>
       ${ncrActs.length?ncrActs.map(a=>`
@@ -5669,6 +5709,41 @@ async function sendTestEmail(){
     st.style.color='var(--red)'; st.textContent='⚠️ Failed: '+( e?.text||e?.message||JSON.stringify(e));
     console.error('EmailJS test error:', e);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOMER CONTACTED
+// ═══════════════════════════════════════════════════════════════
+function openContactedModal(ncrId){
+  document.getElementById('contactedNcrId').value=ncrId;
+  document.getElementById('contactedNotes').value='';
+  const now=new Date();
+  const dtStr=now.toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const who=currentUser?.name||currentUser?.email||'Unknown';
+  document.getElementById('contactedPreview').textContent=dtStr+' · '+who;
+  openModal('contactedModal');
+}
+
+async function confirmContacted(){
+  const id=document.getElementById('contactedNcrId').value;
+  const notes=document.getElementById('contactedNotes').value.trim();
+  const now=new Date();
+  const dtStr=now.toISOString().slice(0,16).replace('T',' ');
+  const who=currentUser?.name||currentUser?.email||'Unknown';
+
+  const patch={
+    customer_contacted:dtStr,
+    contact_confirmed_by:who,
+    contact_notes:notes||null
+  };
+
+  const r=ncrRecords.find(x=>x.id===id);
+  if(r){Object.assign(r,patch);}
+
+  await sbPatch('ncr_records',id,patch).catch(()=>{});
+  closeModal('contactedModal');
+  showToast('✓ Contact confirmed — '+now.toLocaleString('en-GB',{hour:'2-digit',minute:'2-digit'}));
+  openDetail(id); // refresh detail view
 }
 
 function sendResolutionEmailPrompt(ncrId){
