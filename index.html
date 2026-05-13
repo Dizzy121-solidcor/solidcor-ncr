@@ -2025,27 +2025,6 @@ async function toggleUserActive(id,active){
 }
 
 // Change own PIN
-async function savePinChange(){
-  const current=document.getElementById('cpCurrent').value.trim();
-  const newPin=document.getElementById('cpNew').value.trim();
-  const confirm_=document.getElementById('cpConfirm').value.trim();
-  const err=document.getElementById('cpErr');
-
-  if(!current||!newPin||!confirm_){err.textContent='⚠️ All fields required';return;}
-  if(newPin!==confirm_){err.textContent='⚠️ New PINs do not match';return;}
-  if(newPin.length<4||isNaN(newPin)){err.textContent='⚠️ PIN must be 4–6 digits';return;}
-
-  // Verify current PIN
-  const users=await sbGet('ncr_admin_users',`id=eq.${currentUser.id}&pin=eq.${encodeURIComponent(current)}`).catch(()=>[]);
-  if(!users.length){err.textContent='⚠️ Current PIN is incorrect';return;}
-
-  await sbPatch('ncr_admin_users',currentUser.id,{pin:newPin});
-  closeModal('changePinModal');
-  document.getElementById('cpCurrent').value='';
-  document.getElementById('cpNew').value='';
-  document.getElementById('cpConfirm').value='';
-  showToast('✓ PIN updated successfully');
-}
 
 // ── Init — loads live data from Supabase ─────────────────────────
 async function init(){
@@ -5539,6 +5518,13 @@ function loadSettings(){
   return _settingsCache;
 }
 
+function updatePortalView(){
+  const s=loadSettings();
+  const url=(s.portal_url||window.location.origin)+'?portal=ncr';
+  const el=document.getElementById('portalLinkDisplay');
+  if(el) el.textContent=url;
+}
+
 async function loadSettingsFromDB(){
   try{
     const rows=await sbGet('ncr_settings','id=eq.main');
@@ -5549,7 +5535,6 @@ async function loadSettingsFromDB(){
   }catch(e){ return loadSettings(); }
 }
 
-function saveSettings(){
 async function saveSettings(){
   const s={
     anthropic_key:document.getElementById('ejs_anthropic_key').value.trim(),
@@ -5626,30 +5611,6 @@ async function sendNcrEmail(toEmails,subject,bodyHtml){
   }catch(e){console.error('EmailJS error:',e);return false;}
 }
 
-async function sendCustomerSubmissionEmail(ncr){
-  const s=loadSettings();
-  if(!ncr.customer_email&&!s.notify_email)return;
-  const ok=await callEmailFunction({type:'submission',ncr,customer_email:ncr.customer_email||null,notify_email:s.notify_email||null});
-  if(!ok){
-    if(ncr.customer_email)await sendNcrEmail(ncr.customer_email,`[Solidcor] NCR Received — ${ncr.id}`,buildAlertHtml(ncr,false));
-    if(s.notify_email)await sendNcrEmail(s.notify_email,`[NCR Alert] ${ncr.type==='external'?'External':'Internal'} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`,buildAlertHtml(ncr,true));
-  }
-}
-async function sendCustomerResolutionEmail(ncr,res){
-  if(!ncr.customer_email)return;
-  const ok=await callEmailFunction({type:'resolution',ncr,resolution:res,customer_email:ncr.customer_email});
-  if(!ok)await sendNcrEmail(ncr.customer_email,`[Solidcor] NCR Resolved — ${ncr.id}`,`<p>NCR ${ncr.id} resolved. Action: ${res||ncr.corrective||'—'}</p>`);
-}
-async function sendNcrAlertEmail(ncr){
-  const s=loadSettings();if(!s.notify_email)return;
-  const ok=await callEmailFunction({type:'alert',ncr,notify_email:s.notify_email});
-  if(!ok)await sendNcrEmail(s.notify_email,`[NCR Alert] ${ncr.type==='external'?'External':'Internal'} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`,buildAlertHtml(ncr,true));
-}
-async function notifyComponentPicker(ncrId,componentName,qty){
-  const cfg=loadPickerConfig();if(!cfg.picker_email)return;
-  const ok=await callEmailFunction({type:'picker',ncr:{id:ncrId},component:componentName,qty,picker_email:cfg.picker_email});
-  if(!ok)await sendNcrEmail(cfg.picker_email,`[Solidcor] Pick required — ${componentName} for NCR ${ncrId}`,`<p>Component pick required: <strong>${componentName}</strong> x${qty} for NCR ${ncrId}</p>`);
-}
 
 function buildAlertHtml(ncr,isAlert){
   const t=ncr.type==='external'?'External':'Internal';
