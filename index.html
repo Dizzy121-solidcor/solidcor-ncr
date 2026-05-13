@@ -2297,6 +2297,7 @@ function openDetail(id){
     <button class="top-btn ghost" style="padding:5px 10px;font-size:11px" onclick="generateDoorQR('${esc(r.door_ref||r.id)}','${esc(r.so||'')}','${esc(r.customer)}')">🔗 Door QR</button>
     ${currentUser?.isAdmin ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--accent);border-color:var(--accent)" onclick="openEditNcr('${id}')">✏️ Edit</button>` : ''}
     ${r.customer_email ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--green);border-color:var(--green)" onclick="sendResolutionEmailPrompt('${id}')">📧 Resolve & email</button>` : ''}
+    ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteNcr('${id}')">🗑 Delete</button>` : ''}
   `;
 
   const ncrActs = actions.filter(a=>a.ncrId===id);
@@ -2918,7 +2919,7 @@ function submitNCR(){
     issue, units:parseFloat(document.getElementById('ncrUnits').value)||1,
     category, dept, cost:parseFloat(document.getElementById('ncrCost').value)||0,
     transport:0, status:'open',
-    type:['Production','Dispatch','Assembly','Quality','Design','Frame CNC','Office','Sales'].includes(dept)?'internal':'external',
+    type:'internal', // always internal when raised via admin hub
     action, root_cause:'', corrective:'', completed:null,
     legacy:false, raised_by:raisedBy, shift:currentShift
   };
@@ -2927,7 +2928,6 @@ function submitNCR(){
 
   // Save to Supabase
   sbUps('ncr_records',newNCR).catch(e=>{
-    // Fallback to localStorage
     const saved=JSON.parse(localStorage.getItem('ncr_new')||'[]');
     saved.push(newNCR);
     localStorage.setItem('ncr_new',JSON.stringify(saved));
@@ -2939,21 +2939,22 @@ function submitNCR(){
     window._pendingDoorSheetImage = null;
   }
 
-  // Send customer submission email if email provided
+  // Send emails
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
-  // Send NCR alert to notification email
   sendNcrAlertEmail(newNCR);
+
+  // Close modal and show success
+  closeRaiseModal();
+  showToast(`✓ NCR ${id} raised successfully`);
 
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
   showView('detail');
   setTimeout(()=>{
     openDetail(id);
-    // Auto-run RCA after detail loads
     setTimeout(()=>runRCA(id, true), 600);
   },100);
 
-  // Run rules engine — check for maintenance tasks to suggest
   setTimeout(()=>runTaskRules(newNCR), 500);
 }
 
@@ -4545,6 +4546,23 @@ async function callEmailFunction(payload){
   }
 }
 
+
+async function deleteNcr(id){
+  if(currentUser?.role!=='superadmin'){showToast('⚠️ Superadmin only');return;}
+  const r=ncrRecords.find(x=>x.id===id);
+  if(!confirm(`Permanently delete NCR ${id}?\n\nCustomer: ${r?.customer||'—'}\nIssue: ${(r?.issue||'').slice(0,60)}\n\nThis cannot be undone.`)) return;
+  try{
+    await sbDel('ncr_records',id);
+    const idx=ncrRecords.findIndex(x=>x.id===id);
+    if(idx>-1) ncrRecords.splice(idx,1);
+    showView('all');
+    renderTable('all');renderTable('external');renderTable('internal');
+    renderDashboard();updateBadges();
+    showToast(`✓ NCR ${id} deleted`);
+  }catch(e){
+    showToast('⚠️ Delete failed: '+e.message);
+  }
+}
 
 function sendResolutionEmailPrompt(ncrId){
   const ncr = ncrRecords.find(r=>r.id===ncrId);
