@@ -635,6 +635,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <thead>
             <tr style="background:var(--surface)">
               <th style="padding:9px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--border2)">Day</th>
+              <th style="padding:9px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--border2)">Dispatched</th>
               <th style="padding:9px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--border2)">NCRs</th>
               <th style="padding:9px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--border2)">Ext / Int</th>
               <th style="padding:9px 12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--border2)">Cost</th>
@@ -946,14 +947,25 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <!-- SLA config -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">⏱ SLA targets</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div class="form-row" style="padding:0;margin:0"><label style="font-size:11px;color:var(--muted);font-family:var(--mono)">External NCR SLA (days)</label>
-              <input type="number" id="sla_external" placeholder="5" min="1" max="30"
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">External NCRs have two SLA stages. Internal NCRs use the red tag SLA.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-row" style="padding:0;margin:0">
+              <label style="font-size:11px;color:var(--muted);font-family:var(--mono)">Stage 1 — Contact customer (days)</label>
+              <input type="number" id="sla_contact" placeholder="1" min="1" max="7"
                 style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px">
+              <div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:3px">Acknowledge &amp; contact</div>
             </div>
-            <div class="form-row" style="padding:0;margin:0"><label style="font-size:11px;color:var(--muted);font-family:var(--mono)">Red tag SLA (hours)</label>
+            <div class="form-row" style="padding:0;margin:0">
+              <label style="font-size:11px;color:var(--muted);font-family:var(--mono)">Stage 2 — Close NCR (days)</label>
+              <input type="number" id="sla_external" placeholder="7" min="1" max="30"
+                style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px">
+              <div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:3px">Internal actions &amp; close</div>
+            </div>
+            <div class="form-row" style="padding:0;margin:0">
+              <label style="font-size:11px;color:var(--muted);font-family:var(--mono)">Internal / Red tag SLA (hours)</label>
               <input type="number" id="sla_redtag" placeholder="48" min="1"
                 style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);margin-top:3px">
+              <div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:3px">Internal NCRs</div>
             </div>
           </div>
         </div>
@@ -3179,7 +3191,15 @@ function autoNormaliseCustomer(inputEl){
 // ═══════════════════════════════════════════════════════════════
 // WEEKLY MANAGEMENT DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-let _mgmtWeekOffset = 0; // 0 = this week, -1 = last week, etc.
+let _mgmtWeekOffset = 0;
+const DISPATCH_KEY = 'ncr_daily_dispatch';
+
+function getDispatchData(){ try{return JSON.parse(localStorage.getItem(DISPATCH_KEY)||'{}');}catch(e){return {};} }
+function saveDispatch(dateStr, qty){
+  const d=getDispatchData();
+  if(qty>0) d[dateStr]=qty; else delete d[dateStr];
+  localStorage.setItem(DISPATCH_KEY,JSON.stringify(d));
+}
 
 function mgmtPrevWeek(){ _mgmtWeekOffset--; renderMgmtDash(); }
 function mgmtNextWeek(){ _mgmtWeekOffset++; renderMgmtDash(); }
@@ -3211,6 +3231,8 @@ function renderMgmtDash(){
   const fmt = d => new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
   if(lbl) lbl.textContent = `Week of ${fmt(days[0])} – ${fmt(days[6])}`;
 
+  const dispatch = getDispatchData();
+
   // Compute per-day stats
   const dayStats = days.map(dateStr => {
     const dayNcrs = ncrRecords.filter(r=>r.date===dateStr);
@@ -3219,9 +3241,8 @@ function renderMgmtDash(){
     const cost = dayNcrs.reduce((s,r)=>s+(r.cost||0),0);
     const closed = dayNcrs.filter(r=>r.status==='closed').length;
 
-    // RFT: deliveries on this day vs NCRs
-    const dayDels = deliveries.filter(d=>d.delivery_date===dateStr);
-    const totalDoors = dayDels.reduce((s,d)=>s+(d.qty||1),0);
+    // RFT: manually entered dispatch count
+    const totalDoors = dispatch[dateStr] || 0;
     const rft = totalDoors>0 ? Math.max(0,Math.round((totalDoors-dayNcrs.length)/totalDoors*100)) : null;
 
     // SLA: open external NCRs that were open on this day
@@ -3282,6 +3303,13 @@ function renderMgmtDash(){
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${dateLabel}${isToday?' · today':''}</div>
       </td>
       <td style="padding:10px 12px;text-align:center">
+        <input type="number" min="0" placeholder="—"
+          value="${dispatch[d.dateStr]||''}"
+          onchange="saveDispatch('${d.dateStr}',parseInt(this.value)||0);renderMgmtDash()"
+          style="width:60px;padding:4px 6px;text-align:center;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:12px;font-family:var(--mono)"
+          title="Total doors dispatched on this day">
+      </td>
+      <td style="padding:10px 12px;text-align:center">
         <span style="font-size:18px;font-weight:800;color:${d.dayNcrs.length>0?'var(--red)':'var(--green)'}">${d.dayNcrs.length}</span>
       </td>
       <td style="padding:10px 12px;text-align:center;font-size:12px;font-family:var(--mono)">
@@ -3292,8 +3320,8 @@ function renderMgmtDash(){
       </td>
       <td style="padding:10px 12px;text-align:center">
         ${d.rft!==null
-          ?`<span style="font-size:15px;font-weight:700;color:${rftC}">${d.rft}%</span><div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${d.totalDoors}d</div>`
-          :'<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">—</span>'}
+          ?`<span style="font-size:15px;font-weight:700;color:${rftC}">${d.rft}%</span><div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${d.totalDoors} dispatched</div>`
+          :'<span style="color:var(--faint);font-size:11px;font-family:var(--mono)">enter dispatched ↑</span>'}
       </td>
       <td style="padding:10px 12px;text-align:center">
         ${d.slaPct!==null?`
@@ -3346,21 +3374,63 @@ function renderMgmtDash(){
 // ═══════════════════════════════════════════════════════════════
 function getSlaTarget(ncr){
   const s=loadSettings();
-  if(ncr.type==='internal') return (s.sla_redtag||48)/24; // hours to days
-  return s.sla_external||5;
+  if(ncr.type==='internal') return (s.sla_redtag||48)/24;
+  return s.sla_external||7;
+}
+
+function getSlaContactTarget(){
+  const s=loadSettings();
+  return s.sla_contact||1;
 }
 
 function getSlaStatus(ncr){
+  const s=loadSettings();
+  const contactTarget = getSlaContactTarget(); // days to contact
+  const closeTarget = getSlaTarget(ncr);       // days to close
+
   if(ncr.status==='closed'){
-    const days=(new Date(ncr.completed||ncr.updated_at)-new Date(ncr.date))/86400000;
-    return {status:'closed', days:Math.round(days), colour:'#22c55e', label:'Closed'};
+    const days=(new Date(ncr.completed||ncr.updated_at||new Date())-new Date(ncr.date))/86400000;
+    return {status:'closed', days:Math.round(days), colour:'#22c55e', label:'Closed', stage:null};
   }
+
   const daysOpen=(Date.now()-new Date(ncr.date))/86400000;
-  const target=getSlaTarget(ncr);
-  const pct=daysOpen/target;
-  if(pct>=1) return {status:'breached', days:Math.round(daysOpen), colour:'#ef4444', label:`Breached +${Math.round(daysOpen-target)}d`};
-  if(pct>=0.75) return {status:'warning', days:Math.round(daysOpen), colour:'#f59e0b', label:`Due in ${Math.round(target-daysOpen)}d`};
-  return {status:'ok', days:Math.round(daysOpen), colour:'#22c55e', label:`${Math.round(target-daysOpen)}d remaining`};
+
+  // Stage 1: contact breach (only for external)
+  if(ncr.type==='external' && !ncr.customer_contacted && daysOpen>contactTarget){
+    return {
+      status:'contact_breach', days:Math.round(daysOpen), colour:'#ef4444',
+      label:`⚠️ Not contacted (+${Math.round(daysOpen-contactTarget)}d)`, stage:1
+    };
+  }
+
+  // Stage 2: close breach
+  if(daysOpen>closeTarget){
+    return {
+      status:'breached', days:Math.round(daysOpen), colour:'#ef4444',
+      label:`Breached +${Math.round(daysOpen-closeTarget)}d`, stage:2
+    };
+  }
+
+  // Warning at 75% of close target
+  if(daysOpen/closeTarget>=0.75){
+    return {
+      status:'warning', days:Math.round(daysOpen), colour:'#f59e0b',
+      label:`Due in ${Math.round(closeTarget-daysOpen)}d`, stage:2
+    };
+  }
+
+  // Stage 1 in progress (contact pending but within window)
+  if(ncr.type==='external' && !ncr.customer_contacted && daysOpen<=contactTarget){
+    return {
+      status:'contact_pending', days:Math.round(daysOpen), colour:'#8b5cf6',
+      label:`Contact by day ${contactTarget}`, stage:1
+    };
+  }
+
+  return {
+    status:'ok', days:Math.round(daysOpen), colour:'#22c55e',
+    label:`${Math.round(closeTarget-daysOpen)}d remaining`, stage:2
+  };
 }
 
 function renderSlaTracker(){
@@ -3372,15 +3442,16 @@ function renderSlaTracker(){
   records=records.sort((a,b)=>a.date.localeCompare(b.date));
 
   const breached=records.filter(r=>getSlaStatus(r).status==='breached').length;
+  const contactBreach=records.filter(r=>getSlaStatus(r).status==='contact_breach').length;
   const warning=records.filter(r=>getSlaStatus(r).status==='warning').length;
-  const ok=records.filter(r=>getSlaStatus(r).status==='ok').length;
+  const ok=records.filter(r=>['ok','contact_pending'].includes(getSlaStatus(r).status)).length;
   const closed=records.filter(r=>getSlaStatus(r).status==='closed').length;
   const total=records.filter(r=>r.status!=='closed').length;
-  const slaPct=total>0?Math.round((total-breached)/total*100):100;
+  const slaPct=total>0?Math.round((total-breached-contactBreach)/total*100):100;
 
   const sc=document.getElementById('slaStatCards');
   if(sc) sc.innerHTML=`
-    <div class="stat-card red"><div class="stat-val">${breached}</div><div class="stat-label">SLA breached</div></div>
+    <div class="stat-card red"><div class="stat-val">${breached+contactBreach}</div><div class="stat-label">SLA breached</div><div class="stat-sub">${contactBreach} not contacted</div></div>
     <div class="stat-card amber"><div class="stat-val">${warning}</div><div class="stat-label">Due soon (75%+)</div></div>
     <div class="stat-card green"><div class="stat-val">${ok}</div><div class="stat-label">Within SLA</div></div>
     <div class="stat-card ${slaPct>=90?'green':slaPct>=70?'amber':'red'}"><div class="stat-val">${slaPct}%</div><div class="stat-label">SLA compliance</div></div>`;
@@ -4229,15 +4300,18 @@ async function sendRftReport(toEmail,manual){
   const ydStr=yd.toISOString().slice(0,10);
   const ydLabel=yd.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  // Load delivery schedule
+  // Load delivery schedule and manual dispatch
   if(!deliveries.length)loadDeliveries();
+  const dispatch=getDispatchData();
 
-  // Yesterday's deliveries (by delivery_date) and NCRs (by date)
+  // Yesterday's deliveries and NCRs
   const ydDeliveries=deliveries.filter(d=>d.delivery_date===ydStr);
   const ydNcrs=ncrRecords.filter(r=>r.date===ydStr);
 
-  // If no delivery schedule imported, still send a basic NCR summary
-  const totalDoors=ydDeliveries.reduce((s,d)=>s+(d.qty||1),0);
+  // Total doors: manual dispatch takes priority, fall back to delivery schedule
+  const manualDoors=dispatch[ydStr]||0;
+  const scheduleDoors=ydDeliveries.reduce((s,d)=>s+(d.qty||1),0);
+  const totalDoors=manualDoors||scheduleDoors;
 
   // Per-customer breakdown
   const custMap={};
@@ -4288,10 +4362,9 @@ async function sendRftReport(toEmail,manual){
     +'</td>'
     +'</tr></table>';
 
-  // No delivery data warning
-  if(!ydDeliveries.length){
+  if(!totalDoors){
     html+='<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;font-size:13px;color:#92400e;margin-bottom:16px">'
-    +'&#9888; No deliveries found in schedule for '+ydStr+'. Import your delivery schedule in the Deliveries view to enable full RFT tracking.'
+    +'&#9888; No dispatch count entered for '+ydStr+'. Enter doors dispatched in the Weekly Dashboard to enable full RFT calculation.'
     +'</div>';
   }
 
@@ -5289,7 +5362,8 @@ function saveSettings(){
     stock_report_email:document.getElementById('stock_report_email').value.trim(),
     rft_report_email:document.getElementById('rft_report_email').value.trim(),
     weekly_report_email:document.getElementById('weekly_report_email').value.trim(),
-    sla_external:parseInt(document.getElementById('sla_external').value)||5,
+    sla_external:parseInt(document.getElementById('sla_external').value)||7,
+    sla_contact:parseInt(document.getElementById('sla_contact').value)||1,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
   localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));
@@ -5302,7 +5376,7 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
