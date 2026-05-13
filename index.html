@@ -777,6 +777,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <button class="top-btn primary" onclick="openNormaliseCustomers()">Run normalisation</button>
         </div>
 
+        <!-- Daily stock scrap report -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">📦 Daily stock scrap report</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to receive the previous day's scrap/remake stock report automatically each morning. Lists all NCRs where stock was scrapped or needs remaking so stock levels can be adjusted.</div>
+          <input type="email" id="stock_report_email" placeholder="stores@solidcor.co.uk"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+          <button class="top-btn ghost" onclick="sendStockReportNow()" style="font-size:12px">Send now (yesterday's report)</button>
+        </div>
+
         <!-- NCR alert notification email -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🔔 NCR alert email</div>
@@ -1888,6 +1897,8 @@ async function init(){
   renderActions();
   renderReturns();
   updateBadges();
+  // Auto-send daily stock report if not sent today
+  setTimeout(checkDailyStockReport, 4000);
 }
 
 // ── View switching ────────────────────────────────────────────────
@@ -3502,7 +3513,11 @@ async function submitExtNcrPortal(){
   }
 
   // Show success
-  sendNcrAlertEmail(rec);
+  // Fire emails via Netlify function (works from any device, no login needed)
+  fetch('/.netlify/functions/send-ncr-email',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({type:'submission',ncr:rec,customer_email:rec.customer_email||null})
+  }).catch(()=>{});
   document.getElementById('extNcrPortalWrap').innerHTML=`
   <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px">
     <div style="background:#161920;border:1px solid #2a2e38;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:100%">
@@ -3552,6 +3567,106 @@ function downloadExtNcrQR(url){
   a.click();
 }
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// DAILY STOCK SCRAP REPORT EMAIL
+// ═══════════════════════════════════════════════════════════════
+const STOCK_REPORT_KEY='ncr_stock_report_sent';
+
+function checkDailyStockReport(){
+  const s=loadSettings();
+  if(!s.stock_report_email||!s.ejs_service||!s.ejs_template||!s.ejs_pubkey) return;
+  const today=new Date().toISOString().slice(0,10);
+  if(localStorage.getItem(STOCK_REPORT_KEY)===today) return;
+  if(new Date().getHours()<6) return; // don't send before 6am
+  sendStockReport(s.stock_report_email,false);
+  localStorage.setItem(STOCK_REPORT_KEY,today);
+}
+
+function sendStockReportNow(){
+  const s=loadSettings();
+  if(!s.stock_report_email){showToast('⚠️ Set a stock report email address first');return;}
+  sendStockReport(s.stock_report_email,true);
+}
+
+async function sendStockReport(toEmail,manual){
+  const yd=new Date();yd.setDate(yd.getDate()-1);
+  const ydStr=yd.toISOString().slice(0,10);
+  const ydLabel=yd.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const SCRAP_ACTIONS=new Set(['remake','Scrap','scrap','send_parts']);
+  const ydNcrs=ncrRecords.filter(r=>r.date===ydStr);
+  const scrapNcrs=ydNcrs.filter(r=>SCRAP_ACTIONS.has(r.action)||r.disposition==='Scrap'||(r.cost>0&&(r.action==='remake'||r.action==='send_parts')));
+  const costNcrs=ydNcrs.filter(r=>r.cost>0&&!scrapNcrs.find(s=>s.id===r.id));
+  const totalScrapCost=scrapNcrs.reduce((s,r)=>s+(r.cost||0),0);
+  const totalCost=ydNcrs.reduce((s,r)=>s+(r.cost||0),0);
+
+  const row=(r,hi)=>`<tr style="border-bottom:1px solid #eee${hi?';background:#fff8f0':''}">
+    <td style="padding:6px 8px;font-family:monospace;font-size:12px;color:#E07B1A;white-space:nowrap">${r.id}</td>
+    <td style="padding:6px 8px;font-size:13px">${r.customer||'—'}</td>
+    <td style="padding:6px 8px;font-size:12px;color:#666">${r.door_ref||'—'}</td>
+    <td style="padding:6px 8px;font-size:12px;color:#666">${r.so||'—'}</td>
+    <td style="padding:6px 8px;font-size:13px">${(r.issue||'—').slice(0,60)}</td>
+    <td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:600">${r.action||r.disposition||'—'}</td>
+    <td style="padding:6px 8px;font-size:12px;font-family:monospace;font-weight:700;text-align:right;color:${r.cost>0?'#dc2626':'#666'}">£${(r.cost||0).toFixed(2)}</td>
+  </tr>`;
+
+  const thead=`<tr style="background:#f3f4f6">
+    ${['NCR ID','Customer','Door ref','SO','Issue','Action','Cost'].map(h=>`<th style="padding:6px 8px;text-align:${h==='Cost'||h==='Action'?'right':'left'};font-size:11px;color:#6b7280;text-transform:uppercase">${h}</th>`).join('')}
+  </tr>`;
+
+  const html=`<div style="font-family:Arial,sans-serif;max-width:700px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:14px 24px">
+      <span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Daily Stock Scrap Report — ${ydLabel}</span>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:#fef2f2;border-radius:8px;padding:12px;text-align:center;border:1px solid #fecaca">
+          <div style="font-size:28px;font-weight:800;color:#dc2626">${scrapNcrs.length}</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Items to write off</div>
+        </div>
+        <div style="background:#f9fafb;border-radius:8px;padding:12px;text-align:center;border:1px solid #e5e7eb">
+          <div style="font-size:28px;font-weight:800;color:#111">${ydNcrs.length}</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Total NCRs yesterday</div>
+        </div>
+        <div style="background:#fff7ed;border-radius:8px;padding:12px;text-align:center;border:1px solid #fed7aa">
+          <div style="font-size:22px;font-weight:800;color:#E07B1A">£${totalScrapCost.toFixed(2)}</div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Scrap cost</div>
+        </div>
+      </div>
+
+      ${scrapNcrs.length>0?`
+      <h3 style="font-size:15px;margin:0 0 8px;color:#dc2626">🔴 Stock adjustments required — ${scrapNcrs.length} item${scrapNcrs.length!==1?'s':''}</h3>
+      <p style="font-size:12px;color:#6b7280;margin:0 0 10px">Please adjust stock for the following — doors or components scrapped, remade or replaced.</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px"><thead>${thead}</thead>
+        <tbody>${scrapNcrs.map(r=>row(r,true)).join('')}</tbody>
+        <tfoot><tr style="background:#f9fafb;border-top:2px solid #e5e7eb">
+          <td colspan="6" style="padding:6px 8px;font-weight:700;text-align:right;font-size:13px">Total scrap cost:</td>
+          <td style="padding:6px 8px;font-weight:800;font-size:14px;text-align:right;color:#dc2626;font-family:monospace">£${totalScrapCost.toFixed(2)}</td>
+        </tr></tfoot>
+      </table>`
+      :'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;color:#166534;font-size:14px;margin-bottom:16px">✓ No stock write-offs recorded yesterday.</div>'}
+
+      ${costNcrs.length>0?`
+      <h3 style="font-size:14px;margin:0 0 8px;color:#374151">📋 Other NCRs with cost impact (FYI)</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px"><thead>${thead}</thead>
+        <tbody>${costNcrs.map(r=>row(r,false)).join('')}</tbody>
+        <tfoot><tr style="background:#f9fafb;border-top:1px solid #e5e7eb">
+          <td colspan="6" style="padding:6px 8px;font-weight:600;text-align:right;font-size:12px;color:#6b7280">Total cost yesterday:</td>
+          <td style="padding:6px 8px;font-weight:700;text-align:right;font-family:monospace">£${totalCost.toFixed(2)}</td>
+        </tr></tfoot>
+      </table>`:''}
+
+      ${ydNcrs.length===0?'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;color:#166534;font-size:14px;">✓ No NCRs recorded yesterday.</div>':''}
+    </div>
+    <div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">
+      Solidcor NCR Hub · Daily Stock Report · ${new Date().toLocaleString('en-GB')}${manual?' · Sent manually':' · Sent automatically on login'}
+    </div>
+  </div>`;
+
+  await sendNcrEmail(toEmail,`[Solidcor Stock Report] ${ydLabel} — ${scrapNcrs.length} write-off${scrapNcrs.length!==1?'s':''}`,html);
+  if(manual) showToast('✓ Stock report sent to '+toEmail);
+}
+
 let _rptGroup='week';
 function setRptGroup(g){
   _rptGroup=g;
@@ -4392,6 +4507,7 @@ function saveSettings(){
     portal_url:document.getElementById('portal_url').value.trim().replace(/\/$/,''),
     picker_email:document.getElementById('picker_email').value.trim(),
     notify_email:document.getElementById('notify_email').value.trim(),
+    stock_report_email:document.getElementById('stock_report_email').value.trim(),
     sla_external:parseInt(document.getElementById('sla_external').value)||5,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
@@ -4405,143 +4521,30 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','sla_external','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','sla_external','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
 
 // ═══════════════════════════════════════════════════════
-// EMAIL via EmailJS
+// EMAIL — all sent via Netlify function (no login needed)
 // ═══════════════════════════════════════════════════════
-async function sendNcrAlertEmail(ncr){
-  const s=loadSettings();
-  if(!s.notify_email) return;
-  const typeLabel=ncr.type==='external'?'🌐 External':'🏭 Internal';
-  const sourceLabel=ncr.source==='external_portal'?' (via customer portal)':ncr.source==='external_form'?' (via ext. NCR form)':'';
-  const html=`<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid ${ncr.type==='external'?'#3b82f6':'#f97316'}">
-    <div style="background:#111316;padding:14px 20px;display:flex;align-items:center;gap:10px">
-      <span style="color:#E07B1A;font-weight:800;font-size:17px;font-family:monospace">SOLIDCOR</span>
-      <span style="color:#7A7E8A;font-size:12px">NCR Alert${sourceLabel}</span>
-    </div>
-    <div style="padding:20px 24px">
-      <h2 style="font-size:17px;margin:0 0 14px;color:#111316">${typeLabel} NCR Raised — <span style="font-family:monospace;color:#E07B1A">${ncr.id}</span></h2>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:140px">Date raised</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.date}</td></tr>
-        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Customer</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.customer||'—'}</td></tr>
-        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Raised by</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.raised_by||'—'}${ncr.contact_phone?' · '+ncr.contact_phone:''}</td></tr>
-        ${ncr.so?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Sales order</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.so}</td></tr>`:''}
-        ${ncr.door_ref?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Door ref</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.door_ref}</td></tr>`:''}
-        ${ncr.ncr_type?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Type</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.ncr_type}</td></tr>`:''}
-        <tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Issue</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${ncr.issue||'—'}</td></tr>
-        ${ncr.dept?`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600">Department</td><td style="padding:6px 10px">${ncr.dept}</td></tr>`:''}
-      </table>
-    </div>
-    <div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Solidcor NCR Hub · Automated alert</div>
-  </div>`;
-  await sendNcrEmail(s.notify_email, `[NCR Alert] ${typeLabel} — ${ncr.id} — ${ncr.customer||ncr.raised_by}`, html);
-}
-async function sendNcrEmail(toEmails,subject,bodyHtml){
-  const s=loadSettings();
-  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey)return false;
+async function callEmailFunction(payload){
   try{
-    emailjs.init({publicKey:s.ejs_pubkey});
-    const recipients=toEmails.split(',').map(e=>e.trim()).filter(Boolean);
-    for(const to of recipients){
-      await emailjs.send(s.ejs_service,s.ejs_template,{to_email:to,subject,message_html:bodyHtml});
-    }
-    return true;
-  }catch(e){console.error('EmailJS:',e);return false;}
-}
-function getEmailsForAction(action){
-  const s=loadSettings();
-  return {remake:s.email_remake,rework:s.email_rework,return:s.email_return,credit:s.email_credit,inspect:s.email_inspect}[action]||'';
-}
-function buildNcrEmailHtml(ncr,action){
-  const label={remake:'🔄 Remake required',rework:'🔧 Rework required',return:'↩️ Return required',credit:'💰 Credit required',inspect:'🔍 Inspection required',new:'🔴 New external NCR raised'}[action]||action;
-  const rows=[['NCR Number',ncr.id],['Date',ncr.date],['Customer',ncr.customer],['Door Reference',ncr.door_ref||'—'],['Door Type',ncr.door_type||'—'],['Issue',ncr.issue],['Category',ncr.category||'—'],['Department',ncr.dept||'—'],['Raised by',ncr.raised_by||ncr.raisedBy||'—']];
-  return `<div style="font-family:Arial,sans-serif;max-width:600px;border-top:4px solid #E07B1A">
-  <div style="background:#111316;padding:16px 24px"><span style="color:#E07B1A;font-weight:700;font-size:18px;font-family:monospace">SOLIDCOR</span><span style="color:#7A7E8A;font-size:12px;margin-left:10px">NCR Hub</span></div>
-  <div style="padding:24px"><h2 style="margin:0 0 16px;font-size:16px;color:#E07B1A">${label}</h2>
-  <table style="width:100%;border-collapse:collapse;font-size:13px">${rows.map(([k,v])=>`<tr><td style="padding:6px 10px;background:#f5f5f5;font-weight:600;width:140px">${k}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${v}</td></tr>`).join('')}</table></div>
-  <div style="padding:12px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af">Sent automatically by Solidcor NCR Hub</div></div>`;
-}
-async function testEmail(){
-  const s=loadSettings();const st=document.getElementById('settingsStatus');
-  if(!s.ejs_service||!s.ejs_template||!s.ejs_pubkey||!s.email_remake){
-    st.textContent='⚠️ Fill in EmailJS details and at least one recipient email first';st.style.color='var(--amber)';return;
+    const r = await fetch('/.netlify/functions/send-ncr-email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) console.warn('Email function error:',data);
+    return r.ok;
+  }catch(e){
+    console.warn('Email function unreachable:',e.message);
+    return false;
   }
-  st.textContent='Sending…';st.style.color='var(--muted)';
-  const ok=await sendNcrEmail(s.email_remake,'[Solidcor NCR] Test email','<p>This is a test from the Solidcor NCR Hub. Email notifications are working correctly.</p>');
-  st.textContent=ok?'✓ Test email sent!':'⚠️ Send failed — check EmailJS credentials';
-  st.style.color=ok?'var(--green)':'var(--red)';
 }
 
-// ═══════════════════════════════════════════════════════
-// PORTAL
-// ═══════════════════════════════════════════════════════
-function getPortalUrl(){const s=loadSettings();return(s.portal_url||window.location.origin)+'?portal=ncr';}
-
-function updatePortalView(){
-  const url=getPortalUrl();
-  const el=document.getElementById('portalLinkDisplay');if(el)el.textContent=url;
-  const qrEl=document.getElementById('portalQR');
-  if(!qrEl) return;
-
-  // Use QRServer API image, then draw onto canvas with logo overlay
-  const size=200;
-  const logoSize=42;
-  const padding=6;
-
-  const img=new Image();
-  img.crossOrigin='anonymous';
-  img.onload=()=>{
-    const canvas=document.createElement('canvas');
-    canvas.width=size;canvas.height=size;
-    const ctx=canvas.getContext('2d');
-
-    // Draw QR
-    ctx.drawImage(img,0,0,size,size);
-
-    // White rounded rect behind logo
-    const lx=(size-logoSize)/2, ly=(size-logoSize)/2;
-    const r=8;
-    ctx.fillStyle='#fff';
-    ctx.beginPath();
-    ctx.moveTo(lx+r,ly);ctx.lineTo(lx+logoSize-r,ly);ctx.quadraticCurveTo(lx+logoSize,ly,lx+logoSize,ly+r);
-    ctx.lineTo(lx+logoSize,ly+logoSize-r);ctx.quadraticCurveTo(lx+logoSize,ly+logoSize,lx+logoSize-r,ly+logoSize);
-    ctx.lineTo(lx+r,ly+logoSize);ctx.quadraticCurveTo(lx,ly+logoSize,lx,ly+logoSize-r);
-    ctx.lineTo(lx,ly+r);ctx.quadraticCurveTo(lx,ly,lx+r,ly);
-    ctx.closePath();ctx.fill();
-
-    // Orange filled square background
-    ctx.fillStyle='#E07B1A';
-    ctx.beginPath();
-    ctx.moveTo(lx+r+2,ly+2);ctx.lineTo(lx+logoSize-r-2,ly+2);ctx.quadraticCurveTo(lx+logoSize-2,ly+2,lx+logoSize-2,ly+r+2);
-    ctx.lineTo(lx+logoSize-2,ly+logoSize-r-2);ctx.quadraticCurveTo(lx+logoSize-2,ly+logoSize-2,lx+logoSize-r-2,ly+logoSize-2);
-    ctx.lineTo(lx+r+2,ly+logoSize-2);ctx.quadraticCurveTo(lx+2,ly+logoSize-2,lx+2,ly+logoSize-r-2);
-    ctx.lineTo(lx+2,ly+r+2);ctx.quadraticCurveTo(lx+2,ly+2,lx+r+2,ly+2);
-    ctx.closePath();ctx.fill();
-
-    // "S" letter
-    ctx.fillStyle='#fff';
-    ctx.font=`800 ${logoSize*0.62}px Arial,sans-serif`;
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText('S',size/2,size/2+1);
-
-    // Replace img with canvas
-    canvas.style.cssText='border-radius:10px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.2)';
-    qrEl.innerHTML='';
-    qrEl.appendChild(canvas);
-  };
-  img.onerror=()=>{
-    // Fallback to plain img if canvas fails
-    qrEl.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" style="border-radius:8px;border:4px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.15)">`;
-  };
-  img.src=`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(url)}`;
-}
-
-function copyPortalLink(){navigator.clipboard.writeText(getPortalUrl()).then(()=>showToast('🔗 Link copied'));}
 
 function sendResolutionEmailPrompt(ncrId){
   const ncr = ncrRecords.find(r=>r.id===ncrId);
