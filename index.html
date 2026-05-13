@@ -289,6 +289,12 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div class="sb-icon">↩️</div><span>Returns Log</span>
       </div>
       <div class="sb-section">Raise</div>
+      <div class="sb-item" onclick="showView('slatracker')" id="nav-slatracker">
+        <div class="sb-icon">🎯</div><span>SLA Tracker</span>
+      </div>
+      <div class="sb-item" onclick="showView('deliveries')" id="nav-deliveries">
+        <div class="sb-icon">🚚</div><span>Deliveries</span>
+      </div>
       <div class="sb-item" onclick="showView('reports')" id="nav-reports">
         <div class="sb-icon">📊</div><span>Reports</span>
       </div>
@@ -605,6 +611,69 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       </div>
     </div>
 
+    <!-- ═══════════════════════════════════════ SLA TRACKER VIEW -->
+    <div class="view" id="view-slatracker">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
+        <select id="slaTypeFilter" onchange="renderSlaTracker()">
+          <option value="all">All NCRs</option>
+          <option value="external">External only</option>
+          <option value="internal">Internal only</option>
+        </select>
+        <select id="slaStatusFilter" onchange="renderSlaTracker()">
+          <option value="open">Open only</option>
+          <option value="all">All statuses</option>
+        </select>
+        <button class="top-btn ghost" onclick="exportSlaReport()" style="margin-left:auto">⬇ Export</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px" id="slaStatCards"></div>
+      <div class="detail-card" style="margin-top:14px;overflow-x:auto">
+        <h4 style="margin-bottom:12px">NCR SLA Status</h4>
+        <table style="width:100%;border-collapse:collapse;font-size:12px" id="slaTable">
+          <thead>
+            <tr style="background:var(--surface)">
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">NCR ID</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Customer</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Type</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Raised</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Days open</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">SLA target</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">SLA status</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Progress</th>
+              <th style="padding:8px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">Issue</th>
+            </tr>
+          </thead>
+          <tbody id="slaTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════ DELIVERIES VIEW -->
+    <div class="view" id="view-deliveries">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
+        <input type="text" id="delSearch" placeholder="Search customer or door ref…" oninput="renderDeliveries()">
+        <input type="date" id="delFrom" onchange="renderDeliveries()">
+        <input type="date" id="delTo" onchange="renderDeliveries()">
+        <label style="cursor:pointer;margin-left:auto">
+          <input type="file" id="delImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importDeliveries(event)">
+          <span class="top-btn primary">📥 Import schedule</span>
+        </label>
+        <button class="top-btn ghost" onclick="exportDeliveriesCsv()">⬇ Export</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px" id="delStatCards"></div>
+      <div class="detail-card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h4 style="margin:0">Delivery schedule</h4>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="delCount"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px;background:var(--surface);padding:8px 10px;border-radius:var(--r)">
+          Expected columns: Customer · Door Number / Door Ref · Delivery Date · Sales Order (optional) · Quantity (optional)
+        </div>
+        <div style="overflow-x:auto" id="delTableWrap">
+          <div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:12px 0">No delivery schedule imported yet. Click "Import schedule" to upload an Excel file.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- COMPONENTS & COSTS -->
     <div class="view" id="view-components">
       <div style="max-width:780px">
@@ -775,6 +844,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🧹 Normalise customer names</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Scans all existing NCRs and groups similar customer names (e.g. "ian williams", "Ian William", "Ian Williams") into a single canonical version. Preview before applying.</div>
           <button class="top-btn primary" onclick="openNormaliseCustomers()">Run normalisation</button>
+        </div>
+
+        <!-- Weekly exec report -->
+        <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">📈 Weekly exec report</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Email address to receive the weekly executive NCR report every Monday at 7AM. Covers NCRs raised, SLA compliance, top issues and customer FTR%.</div>
+          <input type="email" id="weekly_report_email" placeholder="director@solidcor.co.uk"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:10px">
+          <button class="top-btn ghost" onclick="sendWeeklyReportNow()" style="font-size:12px">Send now (this week's report)</button>
         </div>
 
         <!-- Daily stock scrap report -->
@@ -1904,6 +1982,10 @@ async function init(){
   updateBadges();
   // Auto-send daily stock report if not sent today
   setTimeout(checkDailyStockReport, 4000);
+  // Auto-send weekly exec report if Monday
+  setTimeout(checkWeeklyReport, 5000);
+  // Load delivery schedule
+  loadDeliveries();
 }
 
 // ── View switching ────────────────────────────────────────────────
@@ -1925,6 +2007,8 @@ function showView(v){
   if(v==='actions') setTimeout(checkOverdueNcrs, 100);
   if(v==='reports'){ setTimeout(()=>{renderReports();renderDailyPanel('rptDailyPanel');},50); }
   if(v==='customerreport'){ populateCrCustomers(); }
+  if(v==='slatracker') setTimeout(renderSlaTracker, 50);
+  if(v==='deliveries') setTimeout(renderDeliveries, 50);
 }
 function goBack(){ showView(lastView); }
 
@@ -3029,7 +3113,368 @@ function autoNormaliseCustomer(inputEl){
 }
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
-// RETROSPECTIVE CUSTOMER NORMALISATION
+// SLA TRACKER
+// ═══════════════════════════════════════════════════════════════
+function getSlaTarget(ncr){
+  const s=loadSettings();
+  if(ncr.type==='internal') return (s.sla_redtag||48)/24; // hours to days
+  return s.sla_external||5;
+}
+
+function getSlaStatus(ncr){
+  if(ncr.status==='closed'){
+    const days=(new Date(ncr.completed||ncr.updated_at)-new Date(ncr.date))/86400000;
+    return {status:'closed', days:Math.round(days), colour:'#22c55e', label:'Closed'};
+  }
+  const daysOpen=(Date.now()-new Date(ncr.date))/86400000;
+  const target=getSlaTarget(ncr);
+  const pct=daysOpen/target;
+  if(pct>=1) return {status:'breached', days:Math.round(daysOpen), colour:'#ef4444', label:`Breached +${Math.round(daysOpen-target)}d`};
+  if(pct>=0.75) return {status:'warning', days:Math.round(daysOpen), colour:'#f59e0b', label:`Due in ${Math.round(target-daysOpen)}d`};
+  return {status:'ok', days:Math.round(daysOpen), colour:'#22c55e', label:`${Math.round(target-daysOpen)}d remaining`};
+}
+
+function renderSlaTracker(){
+  const typeF=document.getElementById('slaTypeFilter')?.value||'all';
+  const statusF=document.getElementById('slaStatusFilter')?.value||'open';
+  let records=ncrRecords.filter(r=>!r.legacy);
+  if(typeF!=='all') records=records.filter(r=>r.type===typeF);
+  if(statusF==='open') records=records.filter(r=>r.status!=='closed');
+  records=records.sort((a,b)=>a.date.localeCompare(b.date));
+
+  const breached=records.filter(r=>getSlaStatus(r).status==='breached').length;
+  const warning=records.filter(r=>getSlaStatus(r).status==='warning').length;
+  const ok=records.filter(r=>getSlaStatus(r).status==='ok').length;
+  const closed=records.filter(r=>getSlaStatus(r).status==='closed').length;
+  const total=records.filter(r=>r.status!=='closed').length;
+  const slaPct=total>0?Math.round((total-breached)/total*100):100;
+
+  const sc=document.getElementById('slaStatCards');
+  if(sc) sc.innerHTML=`
+    <div class="stat-card red"><div class="stat-val">${breached}</div><div class="stat-label">SLA breached</div></div>
+    <div class="stat-card amber"><div class="stat-val">${warning}</div><div class="stat-label">Due soon (75%+)</div></div>
+    <div class="stat-card green"><div class="stat-val">${ok}</div><div class="stat-label">Within SLA</div></div>
+    <div class="stat-card ${slaPct>=90?'green':slaPct>=70?'amber':'red'}"><div class="stat-val">${slaPct}%</div><div class="stat-label">SLA compliance</div></div>`;
+
+  const tbody=document.getElementById('slaTableBody');
+  if(!tbody) return;
+  if(!records.length){tbody.innerHTML=`<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--faint);font-family:var(--mono);font-size:12px">No NCRs to show</td></tr>`;return;}
+
+  tbody.innerHTML=records.map(r=>{
+    const sla=getSlaStatus(r);
+    const target=getSlaTarget(r);
+    const pct=Math.min(100,Math.round(sla.days/target*100));
+    const barColour=sla.status==='breached'?'#ef4444':sla.status==='warning'?'#f59e0b':sla.status==='closed'?'#22c55e':'#3b82f6';
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showView('detail');openDetail('${r.id}')">
+      <td style="padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--accent)">${r.id}</td>
+      <td style="padding:8px 10px;font-size:12px">${esc(r.customer)}</td>
+      <td style="padding:8px 10px"><span class="badge ${r.type==='external'?'b-external':'b-internal'}">${r.type}</span></td>
+      <td style="padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--muted)">${r.date}</td>
+      <td style="padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;color:${barColour}">${sla.days}d</td>
+      <td style="padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--muted)">${target}d</td>
+      <td style="padding:8px 10px;white-space:nowrap">
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${barColour}20;color:${barColour}">${sla.label}</span>
+      </td>
+      <td style="padding:8px 10px;min-width:100px">
+        <div style="background:var(--border);border-radius:3px;height:6px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${barColour};transition:width .3s"></div>
+        </div>
+      </td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((r.issue||'').slice(0,50))}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportSlaReport(){
+  const typeF=document.getElementById('slaTypeFilter')?.value||'all';
+  let records=ncrRecords.filter(r=>!r.legacy);
+  if(typeF!=='all') records=records.filter(r=>r.type===typeF);
+  const csv='NCR ID,Customer,Type,Date,Days Open,SLA Target,SLA Status,Issue\n'+
+    records.map(r=>{
+      const sla=getSlaStatus(r);
+      return `"${r.id}","${r.customer}","${r.type}","${r.date}","${sla.days}","${getSlaTarget(r)}d","${sla.label}","${(r.issue||'').replace(/"/g,"'")}"`;
+    }).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`sla-report-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DELIVERY SCHEDULE — import + FTR calculation
+// ═══════════════════════════════════════════════════════════════
+const DEL_KEY='ncr_deliveries';
+let deliveries=[];
+
+function loadDeliveries(){
+  try{deliveries=JSON.parse(localStorage.getItem(DEL_KEY)||'[]');}
+  catch(e){deliveries=[];}
+}
+
+function renderDeliveries(){
+  if(!deliveries.length) loadDeliveries();
+  const search=(document.getElementById('delSearch')?.value||'').toLowerCase();
+  const from=document.getElementById('delFrom')?.value||'';
+  const to=document.getElementById('delTo')?.value||'9999-12-31';
+  let filtered=deliveries;
+  if(search) filtered=filtered.filter(d=>(d.customer||'').toLowerCase().includes(search)||(d.door_ref||'').toLowerCase().includes(search));
+  if(from) filtered=filtered.filter(d=>!d.delivery_date||d.delivery_date>=from);
+  if(to!=='9999-12-31') filtered=filtered.filter(d=>!d.delivery_date||d.delivery_date<=to);
+
+  const totalDoors=filtered.reduce((s,d)=>s+(d.qty||1),0);
+  const customers=[...new Set(filtered.map(d=>d.customer).filter(Boolean))].length;
+  // Match NCRs to deliveries
+  const ncrCount=filtered.reduce((s,d)=>{
+    const n=ncrRecords.filter(r=>r.door_ref===d.door_ref||(r.customer===d.customer&&r.so===d.so)).length;
+    return s+n;
+  },0);
+  const ftrPct=totalDoors>0?Math.max(0,Math.round((totalDoors-ncrCount)/totalDoors*100)):null;
+
+  const sc=document.getElementById('delStatCards');
+  if(sc) sc.innerHTML=`
+    <div class="stat-card blue"><div class="stat-val">${totalDoors}</div><div class="stat-label">Doors in schedule</div></div>
+    <div class="stat-card"><div class="stat-val">${customers}</div><div class="stat-label">Customers</div></div>
+    <div class="stat-card amber"><div class="stat-val">${ncrCount}</div><div class="stat-label">Matched NCRs</div></div>
+    <div class="stat-card ${ftrPct===null?'':ftrPct>=95?'green':ftrPct>=85?'amber':'red'}">
+      <div class="stat-val">${ftrPct!==null?ftrPct+'%':'—'}</div>
+      <div class="stat-label">First time right</div>
+    </div>`;
+
+  const cnt=document.getElementById('delCount');
+  if(cnt) cnt.textContent=`${filtered.length} of ${deliveries.length} records`;
+
+  const wrap=document.getElementById('delTableWrap');
+  if(!wrap) return;
+  if(!deliveries.length){wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:12px 0">No delivery schedule imported yet.</div>';return;}
+  if(!filtered.length){wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:12px 0">No records match your filters.</div>';return;}
+
+  wrap.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:var(--surface)">
+      ${['Customer','Door ref','SO','Delivery date','Qty','NCRs','FTR'].map(h=>`<th style="padding:7px 10px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase">${h}</th>`).join('')}
+    </tr></thead>
+    <tbody>${filtered.slice(0,200).map(d=>{
+      const ncrs=ncrRecords.filter(r=>r.door_ref===d.door_ref||(r.customer===d.customer&&d.so&&r.so===d.so));
+      const qty=d.qty||1;
+      const ftr=ncrs.length===0?'<span style="color:var(--green)">✓ OK</span>':'<span style="color:var(--red)">'+ncrs.length+' NCR'+( ncrs.length!==1?'s':'')+'</span>';
+      return `<tr style="border-bottom:1px solid var(--border)${ncrs.length?';background:rgba(239,68,68,.04)':''}">
+        <td style="padding:7px 10px">${esc(d.customer||'—')}</td>
+        <td style="padding:7px 10px;font-family:var(--mono);font-size:11px;color:var(--accent)">${esc(d.door_ref||'—')}</td>
+        <td style="padding:7px 10px;font-size:11px;color:var(--muted)">${esc(d.so||'—')}</td>
+        <td style="padding:7px 10px;font-family:var(--mono);font-size:11px">${d.delivery_date||'—'}</td>
+        <td style="padding:7px 10px;font-family:var(--mono);font-size:11px">${qty}</td>
+        <td style="padding:7px 10px">${ncrs.length?`<span style="cursor:pointer;text-decoration:underline;color:var(--red)" onclick="showView('external')">${ncrs.length}</span>`:'0'}</td>
+        <td style="padding:7px 10px">${ftr}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>${filtered.length>200?`<div style="padding:8px;font-size:11px;color:var(--muted);font-family:var(--mono)">Showing first 200 of ${filtered.length} records</div>`:''}`;
+}
+
+function importDeliveries(event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+      if(!rows.length){showToast('⚠️ File appears empty');return;}
+
+      // Map headers
+      const DEL_COL_MAP={
+        'customer':'customer','customer name':'customer','client':'customer',
+        'door ref':'door_ref','door reference':'door_ref','door number':'door_ref',
+        'door no':'door_ref','door':'door_ref','slab number':'door_ref',
+        'sales order':'so','so':'so','order number':'so','order no':'so',
+        'delivery date':'delivery_date','date':'delivery_date','due date':'delivery_date',
+        'qty':'qty','quantity':'qty','units':'qty','doors':'qty',
+      };
+      const headers=rows[0].map(h=>{
+        const clean=(h||'').toString().toLowerCase().trim();
+        return DEL_COL_MAP[clean]||null;
+      });
+
+      const data=[];
+      for(let i=1;i<rows.length;i++){
+        const row=rows[i];
+        if(row.every(c=>!c||c.toString().trim()===''))continue;
+        const obj={};
+        headers.forEach((f,idx)=>{if(f)obj[f]=(row[idx]||'').toString().trim();});
+        if(!obj.customer&&!obj.door_ref)continue;
+        // Parse date
+        if(obj.delivery_date){
+          const d=new Date(obj.delivery_date);
+          if(!isNaN(d))obj.delivery_date=d.toISOString().slice(0,10);
+        }
+        obj.qty=parseInt(obj.qty)||1;
+        obj._id='del_'+i+'_'+Date.now();
+        data.push(obj);
+      }
+
+      if(!data.length){showToast('⚠️ No valid rows found');return;}
+      deliveries=data;
+      localStorage.setItem(DEL_KEY,JSON.stringify(deliveries));
+      showToast(`✓ Imported ${data.length} delivery records`);
+      renderDeliveries();
+    }catch(e){showToast('⚠️ Could not read file: '+e.message);}
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value='';
+}
+
+function exportDeliveriesCsv(){
+  if(!deliveries.length){showToast('No delivery records to export');return;}
+  const csv='Customer,Door Ref,SO,Delivery Date,Qty,NCRs raised\n'+
+    deliveries.map(d=>{
+      const n=ncrRecords.filter(r=>r.door_ref===d.door_ref).length;
+      return `"${d.customer||''}","${d.door_ref||''}","${d.so||''}","${d.delivery_date||''}","${d.qty||1}","${n}"`;
+    }).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`deliveries-${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEEKLY EXEC REPORT
+// ═══════════════════════════════════════════════════════════════
+const WEEKLY_REPORT_KEY='ncr_weekly_report_sent';
+
+function checkWeeklyReport(){
+  const s=loadSettings();
+  if(!s.weekly_report_email||!s.ejs_service||!s.ejs_template||!s.ejs_pubkey)return;
+  const today=new Date();
+  if(today.getDay()!==1)return; // Monday only
+  if(today.getHours()<7)return;
+  const key=today.toISOString().slice(0,10);
+  if(localStorage.getItem(WEEKLY_REPORT_KEY)===key)return;
+  sendWeeklyReport(s.weekly_report_email,false);
+  localStorage.setItem(WEEKLY_REPORT_KEY,key);
+}
+
+function sendWeeklyReportNow(){
+  const s=loadSettings();
+  if(!s.weekly_report_email){showToast('⚠️ Set a weekly report email address first');return;}
+  sendWeeklyReport(s.weekly_report_email,true);
+}
+
+async function sendWeeklyReport(toEmail,manual){
+  const now=new Date();
+  const weekStart=new Date(now);weekStart.setDate(now.getDate()-7);
+  const weekEnd=new Date(now);weekEnd.setDate(now.getDate()-1);
+  const ws=weekStart.toISOString().slice(0,10);
+  const we=weekEnd.toISOString().slice(0,10);
+  const weekLabel=`${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  const weekNcrs=ncrRecords.filter(r=>r.date>=ws&&r.date<=we&&!r.legacy);
+  const ext=weekNcrs.filter(r=>r.type==='external');
+  const int=weekNcrs.filter(r=>r.type==='internal');
+  const closed=weekNcrs.filter(r=>r.status==='closed').length;
+  const totalCost=weekNcrs.reduce((s,r)=>s+(r.cost||0),0);
+
+  // SLA compliance this week
+  const s=loadSettings();
+  const slaTarget=s.sla_external||5;
+  const openExt=ncrRecords.filter(r=>r.type==='external'&&r.status!=='closed'&&!r.legacy);
+  const breached=openExt.filter(r=>getSlaStatus(r).status==='breached').length;
+  const slaTotal=openExt.length;
+  const slaPct=slaTotal>0?Math.round((slaTotal-breached)/slaTotal*100):100;
+
+  // Top fault categories this week
+  const cats={};weekNcrs.forEach(r=>{if(r.category)cats[r.category]=(cats[r.category]||0)+1;});
+  const topCats=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Top customers this week
+  const custs={};ext.forEach(r=>{if(r.customer)custs[r.customer]=(custs[r.customer]||0)+1;});
+  const topCusts=Object.entries(custs).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // All open NCRs with SLA status
+  const openNcrs=ncrRecords.filter(r=>r.status!=='closed'&&!r.legacy).sort((a,b)=>a.date.localeCompare(b.date));
+
+  const statBox=(val,label,colour)=>`<div style="background:#f9fafb;border-radius:8px;padding:14px;text-align:center;border:1px solid #e5e7eb">
+    <div style="font-size:28px;font-weight:800;color:${colour}">${val}</div>
+    <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-top:3px">${label}</div>
+  </div>`;
+
+  const slaColour=slaPct>=90?'#22c55e':slaPct>=70?'#f59e0b':'#ef4444';
+
+  const html=`<div style="font-family:Arial,sans-serif;max-width:700px;border-top:4px solid #E07B1A">
+    <div style="background:#111316;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div><span style="color:#E07B1A;font-weight:800;font-size:18px;font-family:monospace">SOLIDCOR</span>
+      <span style="color:#7A7E8A;font-size:12px;margin-left:10px">Weekly NCR Executive Report</span></div>
+      <div style="color:#7A7E8A;font-size:12px">${weekLabel}</div>
+    </div>
+    <div style="padding:20px 24px">
+
+      <h2 style="font-size:16px;margin:0 0 14px;color:#111">This week's summary</h2>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+        ${statBox(ext.length,'External NCRs','#3b82f6')}
+        ${statBox(int.length,'Internal NCRs','#f97316')}
+        ${statBox(closed,'Closed this week','#22c55e')}
+        ${statBox('£'+totalCost.toFixed(0),'Total cost','#E07B1A')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+        <div style="background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:8px">SLA Compliance (all open)</div>
+          <div style="font-size:32px;font-weight:800;color:${slaColour}">${slaPct}%</div>
+          <div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:8px">
+            <div style="width:${slaPct}%;height:100%;background:${slaColour};border-radius:4px"></div>
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-top:6px">${breached} breached · ${slaTotal} open · ${slaTarget}-day target</div>
+        </div>
+        <div style="background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:8px">Top fault types this week</div>
+          ${topCats.length?topCats.map(([c,n])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #e5e7eb">
+            <span>${c}</span><span style="font-weight:700;color:#E07B1A">${n}</span>
+          </div>`).join(''):'<div style="color:#6b7280;font-size:12px">No faults this week</div>'}
+        </div>
+      </div>
+
+      ${topCusts.length?`
+      <h3 style="font-size:14px;margin:0 0 8px">Top customers by NCRs this week</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+        <thead><tr style="background:#f3f4f6">
+          <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280">Customer</th>
+          <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280">NCRs this week</th>
+          <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280">Total all time</th>
+        </tr></thead>
+        <tbody>${topCusts.map(([c,n])=>{
+          const total=ncrRecords.filter(r=>r.customer===c).length;
+          return `<tr style="border-bottom:1px solid #eee">
+            <td style="padding:7px 10px">${c}</td>
+            <td style="padding:7px 10px;text-align:right;font-weight:700;color:#3b82f6">${n}</td>
+            <td style="padding:7px 10px;text-align:right;color:#6b7280">${total}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:''}
+
+      <h3 style="font-size:14px;margin:0 0 8px">Open NCRs — SLA status (${openNcrs.length} total)</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">
+        <thead><tr style="background:#f3f4f6">
+          ${['NCR ID','Customer','Type','Days open','SLA status','Issue'].map(h=>`<th style="padding:6px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${openNcrs.slice(0,20).map(r=>{
+          const sla=getSlaStatus(r);
+          const c=sla.status==='breached'?'#dc2626':sla.status==='warning'?'#d97706':'#16a34a';
+          return `<tr style="border-bottom:1px solid #eee${sla.status==='breached'?';background:#fef2f2':''}">
+            <td style="padding:6px 10px;font-family:monospace;color:#E07B1A">${r.id}</td>
+            <td style="padding:6px 10px">${r.customer||'—'}</td>
+            <td style="padding:6px 10px;text-transform:capitalize">${r.type}</td>
+            <td style="padding:6px 10px;font-weight:700;color:${c}">${sla.days}d</td>
+            <td style="padding:6px 10px;color:${c};font-weight:600">${sla.label}</td>
+            <td style="padding:6px 10px;color:#6b7280;max-width:180px">${(r.issue||'—').slice(0,50)}</td>
+          </tr>`;
+        }).join('')}
+        ${openNcrs.length>20?`<tr><td colspan="6" style="padding:8px 10px;color:#6b7280;font-size:11px">+ ${openNcrs.length-20} more open NCRs not shown</td></tr>`:''}
+        </tbody>
+      </table>
+
+    </div>
+    <div style="padding:10px 24px;background:#f9f9f9;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb">
+      Solidcor NCR Hub · Weekly Executive Report · ${manual?'Sent manually':'Sent automatically every Monday at 7AM'} · ${now.toLocaleString('en-GB')}
+    </div>
+  </div>`;
+
+  await sendNcrEmail(toEmail,`[Solidcor] Weekly NCR Report — ${weekLabel} — ${slaPct}% SLA`,html);
+  if(manual) showToast('✓ Weekly report sent to '+toEmail);
+}
 // ═══════════════════════════════════════════════════════════════
 let _normaliseGroups = [];
 
@@ -3877,7 +4322,8 @@ function renderCustomerReport(){
   if(!customer){body.innerHTML='<div style="color:var(--faint);font-size:13px;font-family:var(--mono);padding:20px 0">Select a customer to generate their report.</div>';return;}
   const range=crDateRange();
   const ncrs=ncrRecords.filter(r=>r.customer===customer&&r.date>=range.from&&r.date<=range.to);
-  const doorsSupplied=parseInt(document.getElementById('crDoorsSupplied')?.value)||0;
+  const doorsSupplied=parseInt(document.getElementById('crDoorsSupplied')?.value)||
+    deliveries.filter(d=>d.customer===customer&&(!range.from||d.delivery_date>=range.from)&&(!range.to||d.delivery_date<=range.to)).reduce((s,d)=>s+(d.qty||1),0)||0;
   const ftrPct=doorsSupplied>0?Math.max(0,Math.round((doorsSupplied-ncrs.length)/doorsSupplied*100)):null;
   // Recurring issues
   const catC={};ncrs.forEach(r=>{if(r.category)catC[r.category]=(catC[r.category]||0)+1;});
@@ -4515,6 +4961,7 @@ function saveSettings(){
     picker_email:document.getElementById('picker_email').value.trim(),
     notify_email:document.getElementById('notify_email').value.trim(),
     stock_report_email:document.getElementById('stock_report_email').value.trim(),
+    weekly_report_email:document.getElementById('weekly_report_email').value.trim(),
     sla_external:parseInt(document.getElementById('sla_external').value)||5,
     sla_redtag:parseInt(document.getElementById('sla_redtag').value)||48,
   };
@@ -4528,7 +4975,7 @@ function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','sla_external','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','stock_report_email','weekly_report_email','sla_external','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
