@@ -6312,74 +6312,52 @@ async function loadComments(ncrId){
   return await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`).catch(()=>[]);
 }
 
-const _localComments = {}; // in-memory cache keyed by ncr_id
-
-async function loadComments(ncrId){
-  try{
-    const rows = await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`);
-    // Merge with any local-only comments
-    const local = _localComments[ncrId]||[];
-    const dbIds = new Set((rows||[]).map(r=>r.id));
-    const merged = [...(rows||[]), ...local.filter(c=>!dbIds.has(c.id))];
-    merged.sort((a,b)=>a.created_at.localeCompare(b.created_at));
-    return merged;
-  }catch(e){
-    // Table doesn't exist — return local-only comments
-    return _localComments[ncrId]||[];
-  }
-}
-
 async function addComment(ncrId){
   const inp=document.getElementById('commentInput');
   const text=(inp?.value||'').trim();
   if(!text) return;
   const btn=document.getElementById('commentPostBtn');
   if(btn){btn.disabled=true;btn.textContent='Posting…';}
-
-  const comment={
-    id:'cmt_'+Date.now(),
-    ncr_id:ncrId,
-    text,
+  const comment={id:'cmt_'+Date.now(),ncr_id:ncrId,text,
     author:currentUser?.name||currentUser?.email||'Unknown',
-    created_at:new Date().toISOString()
-  };
-
-  // Add to local store immediately so it shows even if DB fails
-  if(!_localComments[ncrId]) _localComments[ncrId]=[];
-  _localComments[ncrId].push(comment);
+    created_at:new Date().toISOString()};
   inp.value='';
-  renderComments(ncrId); // show immediately from local
-
-  // Save to DB in background
-  sbUps('ncr_comments',comment).catch(e=>{
-    console.warn('Comment save failed (table may not exist):', e.message);
-  });
-
+  // Insert directly into DOM — no in-memory cache that bleeds between NCRs
+  const wrap=document.getElementById('commentsWrap');
+  if(wrap){
+    const noMsg=wrap.querySelector('[data-no-comments]');
+    if(noMsg) noMsg.remove();
+    const div=document.createElement('div');
+    div.style.cssText='padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)';
+    div.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+      +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(comment.author)+'</span>'
+      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Just now</span></div>'
+      +'<div style="font-size:13px;line-height:1.5">'+esc(text)+'</div>';
+    wrap.appendChild(div);
+    wrap.scrollTop=wrap.scrollHeight;
+  }
+  sbUps('ncr_comments',comment).catch(e=>console.warn('Comment save:',e.message));
   if(btn){btn.disabled=false;btn.textContent='Post';}
 }
 
 async function renderComments(ncrId){
   const wrap=document.getElementById('commentsWrap');
   if(!wrap) return;
-
-  // Merge DB comments with local (in case DB table doesn't exist yet)
-  let dbComments=[];
-  try{ dbComments=await loadComments(ncrId)||[]; }catch(e){}
-  const local=(_localComments[ncrId]||[]).filter(lc=>!dbComments.find(dc=>dc.id===lc.id));
-  const comments=[...dbComments,...local].sort((a,b)=>a.created_at.localeCompare(b.created_at));
-
-  if(!comments.length){
-    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0">No comments yet — add one below.</div>';
-    return;
+  wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>Loading…</div>';
+  try{
+    const comments=await loadComments(ncrId)||[];
+    if(!comments.length){
+      wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet — add one below.</div>';
+      return;
+    }
+    wrap.innerHTML=comments.map(c=>'<div style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+      +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(c.author)+'</span>'
+      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>'
+      +'<div style="font-size:13px;line-height:1.5">'+esc(c.text)+'</div></div>').join('');
+  }catch(e){
+    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet.</div>';
   }
-  wrap.innerHTML=comments.map(c=>`
-    <div style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:12px;font-weight:600;color:var(--accent)">${esc(c.author)}</span>
-        <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
-      </div>
-      <div style="font-size:13px;line-height:1.5">${esc(c.text)}</div>
-    </div>`).join('');
 }
 // ═══════════════════════════════════════════════════════════════
 function openContactedModal(ncrId){
