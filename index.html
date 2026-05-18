@@ -2545,35 +2545,44 @@ function openDetail(id){
   document.getElementById('detailMain').innerHTML = `
     <!-- Contact / submitter info panel -->
     <div class="detail-card" style="margin-bottom:10px">
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
         <div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">${r.type==='external'?'Customer contact':'Raised by (Solidcor)'}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Raised by</div>
           <div style="font-size:13px;font-weight:600">${esc(r.raised_by||r.raisedBy||'—')}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px">${r.type==='external'?'Customer contact':'Solidcor staff'}</div>
         </div>
         ${r.contact_phone?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Phone</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Contact number</div>
           <div style="font-size:13px"><a href="tel:${esc(r.contact_phone)}" style="color:var(--accent)">${esc(r.contact_phone)}</a></div>
         </div>`:''}
         ${r.customer_email?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Customer email</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Customer email</div>
           <div style="font-size:13px"><a href="mailto:${esc(r.customer_email)}" style="color:var(--accent)">${esc(r.customer_email)}</a></div>
         </div>`:''}
+        ${r.customer?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Customer</div>
+          <div style="font-size:13px;font-weight:600">${esc(r.customer)}</div>
+        </div>`:''}
         ${r.project_ref?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Project ref</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Project ref</div>
           <div style="font-size:13px">${esc(r.project_ref)}</div>
         </div>`:''}
         ${r.so?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Sales order</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Sales order</div>
           <div style="font-size:13px;font-family:var(--mono)">${esc(r.so)}</div>
         </div>`:''}
         ${r.door_ref?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Door ref</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Door ref</div>
           <div style="font-size:13px;font-family:var(--mono)">${esc(r.door_ref)}</div>
         </div>`:''}
         ${r.dept?`<div>
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Department</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Department</div>
           <div style="font-size:13px">${esc(r.dept)}</div>
         </div>`:''}
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px">Date raised</div>
+          <div style="font-size:13px;font-family:var(--mono)">${r.date||'—'}</div>
+        </div>
       </div>
     </div>
 
@@ -5771,11 +5780,13 @@ function exportNcrPdf(id){
   <div class="meta-bar">
     <div class="meta-item"><strong>${r.date||'—'}</strong>Date raised</div>
     <div class="meta-item"><strong>${r.customer||'—'}</strong>Customer</div>
+    <div class="meta-item"><strong>${r.raised_by||'—'}</strong>${r.type==='external'?'Customer contact':'Raised by'}</div>
+    ${r.contact_phone?`<div class="meta-item"><strong>${r.contact_phone}</strong>Phone</div>`:''}
+    ${r.customer_email?`<div class="meta-item"><strong>${r.customer_email}</strong>Email</div>`:''}
     ${r.so?`<div class="meta-item"><strong>${r.so}</strong>Sales order</div>`:''}
     ${r.door_ref?`<div class="meta-item"><strong>${r.door_ref}</strong>Door reference</div>`:''}
     ${r.ncr_type?`<div class="meta-item"><strong>${r.ncr_type}</strong>NCR type</div>`:''}
     ${r.dept?`<div class="meta-item"><strong>${r.dept}</strong>Department</div>`:''}
-    ${r.raised_by?`<div class="meta-item"><strong>${r.raised_by}</strong>Raised by</div>`:''}
   </div>
 
   <!-- Details section -->
@@ -5783,6 +5794,9 @@ function exportNcrPdf(id){
     <div class="section-title">NCR Details</div>
     <table>
       ${field('Customer',r.customer)}
+      ${field('Raised by',r.raised_by+(r.type==='external'?' (customer contact)':' (Solidcor)'))}
+      ${r.contact_phone?field('Contact number',r.contact_phone):''}
+      ${r.customer_email?field('Customer email',r.customer_email):''}
       ${field('Sales order',r.so)}
       ${field('Door reference',r.door_ref)}
       ${field('Door type / range',r.door_type)}
