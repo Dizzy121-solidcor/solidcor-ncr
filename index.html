@@ -243,8 +243,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 <!-- Operator QR modal -->
 <div class="modal-overlay hidden" id="opQrModal" style="z-index:9999">
   <div class="modal" style="width:min(380px,95vw);text-align:center">
-    <h3>📱 Internal NCR Portal QR</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Staff scan this to raise internal NCRs. No login required.</p>
+    <h3>🔲 Internal NCR Portal QR</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Staff scan this to raise internal NCRs from the shop floor. No login required.</p>
     <div id="opQrCanvas" style="display:flex;justify-content:center;margin-bottom:12px"></div>
     <div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;background:var(--surface);border-radius:var(--r);padding:8px 12px;margin-bottom:14px" id="opQrUrl"></div>
     <div class="modal-actions" style="justify-content:center;gap:8px">
@@ -304,6 +304,9 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div class="sb-item" onclick="showView('customerreport')" id="nav-customerreport">
         <div class="sb-icon">👤</div><span>Customer Report</span>
       </div>
+      <div class="sb-item" onclick="showOpQR()" id="nav-intncrqr">
+        <div class="sb-icon">🔲</div><span>Int. NCR QR</span>
+      </div>
       <div class="sb-item" onclick="showExtNcrQR()" id="nav-extncrqr">
         <div class="sb-icon">🔲</div><span>Ext. NCR QR</span>
       </div>
@@ -311,7 +314,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div class="sb-icon">📋</div><span>Ext. NCR Form</span>
       </div>
       <div class="sb-item" onclick="openRaiseNCR()" id="nav-raise">
-        <div class="sb-icon">🔴</div><span>Raise NCR</span>
+        <div class="sb-icon">🔴</div><span>Raise Internal NCR</span>
       </div>
       <div class="sb-item" onclick="openReturnScanModal()" id="nav-returnscan">
         <div class="sb-icon">📦</div><span>Scan Return</span>
@@ -366,7 +369,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div id="globalSearchDrop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:1000;max-height:360px;overflow-y:auto"></div>
       </div>
       <button class="top-btn ghost" id="topShareBtn" style="display:none" onclick="copyNCRLink()">🔗 Share link</button>
-      <button class="top-btn primary" onclick="openRaiseNCR()">🔴 Raise NCR</button>
+      <button class="top-btn ghost" onclick="openExtNcrModal()" style="border-color:#3b82f6;color:#3b82f6">🌐 Raise External NCR</button>
+      <button class="top-btn primary" onclick="openRaiseNCR()">🔴 Raise Internal NCR</button>
     </div>
 
     <!-- DASHBOARD -->
