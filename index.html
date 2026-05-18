@@ -7015,6 +7015,14 @@ function portalBuildConfirm(){
 }
 
 async function submitPortalNCR(){
+  // Prevent double submission
+  const submitBtn = document.querySelector('#pstep4 button[onclick*="submitPortalNCR"]');
+  if(submitBtn){
+    if(submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+  }
+
   const name=(document.getElementById('p_name')?.value||'').trim();
   // Remember this name for next time on this device
   if(name) localStorage.setItem('ncr_portal_name', name);
@@ -7066,11 +7074,20 @@ async function submitPortalNCR(){
     await sendNcrEmail(recipients,`[Solidcor Red Tag] ${finalFault} — ${area} — ${doorRef}`,buildNcrEmailHtml(newNCR,actionType));
   }
 
-  // Show success
-  document.getElementById('portalBar').style.display='none';
-  document.getElementById('pstep4').classList.remove('active');
-  document.getElementById('pstepSuccess').classList.add('active');
-  document.getElementById('portalSuccessId').textContent='Reference: '+id;
+  // Show success — replace entire portal content
+  const wrap = document.getElementById('publicPortalWrap');
+  if(wrap){
+    wrap.querySelector('.p-body').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:32px 20px">
+        <div style="font-size:72px;margin-bottom:20px">✅</div>
+        <div style="font-size:26px;font-weight:800;margin-bottom:10px;color:var(--text)">NCR Submitted</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent);background:rgba(224,123,26,.1);border:1px solid rgba(224,123,26,.3);border-radius:8px;padding:12px 24px;margin:16px 0">${id}</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.7;max-width:300px;margin-bottom:28px">Keep this reference number. The quality team has been notified automatically.</div>
+        <button onclick="resetPortalForm()" style="padding:14px 36px;background:var(--accent);border:none;border-radius:var(--r);color:#fff;font-size:16px;font-weight:700;cursor:pointer;border-radius:8px">Report another defect</button>
+      </div>`;
+    const bar = wrap.querySelector('#portalBar');
+    if(bar) bar.style.display = 'none';
+  }
   window.scrollTo(0,0);
 
   // Run maint rules
