@@ -7067,29 +7067,28 @@ async function submitPortalNCR(){
     localStorage.setItem('ncr_new',JSON.stringify(saved));
   });
 
-  // Email notification
-  const s=loadSettings();
-  const recipients=getEmailsForAction(actionType)||s.email_remake||s.email_rework||'';
-  if(s.ejs_service&&recipients){
-    await sendNcrEmail(recipients,`[Solidcor Red Tag] ${finalFault} — ${area} — ${doorRef}`,buildNcrEmailHtml(newNCR,actionType));
-  }
-
-  // Replace portal with success screen
+  // Show success IMMEDIATELY — don't wait for email
   const portalWrap = document.getElementById('publicPortalWrap');
   if(portalWrap){
     portalWrap.innerHTML = `<div style="min-height:100vh;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px">
       <div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:40px 32px;text-align:center;max-width:380px;width:100%">
-        <div style="font-size:72px;margin-bottom:16px">✅</div>
+        <div style="font-size:72px;margin-bottom:16px">&#x2705;</div>
         <div style="font-size:24px;font-weight:800;margin-bottom:10px;color:var(--text)">NCR Submitted</div>
-        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent);background:rgba(224,123,26,.12);border:1px solid rgba(224,123,26,.3);border-radius:8px;padding:12px 20px;margin:16px auto;display:inline-block">${id}</div>
-        <div style="font-size:14px;color:var(--muted);line-height:1.7;margin-bottom:28px">Keep this reference number.<br>The quality team has been notified.</div>
-        <button onclick="resetPortalForm()" style="padding:14px 32px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;width:100%">Report another defect</button>
+        <div style="font-family:monospace;font-size:18px;font-weight:700;color:#E07B1A;background:rgba(224,123,26,.12);border:1px solid rgba(224,123,26,.3);border-radius:8px;padding:12px 20px;margin:16px auto;display:inline-block">${id}</div>
+        <div style="font-size:14px;color:#7a7e8a;line-height:1.7;margin-bottom:28px">Keep this reference number.<br>The quality team has been notified.</div>
+        <button onclick="document.getElementById('publicPortalWrap').remove();showPublicPortal()" style="padding:14px 32px;background:#E07B1A;border:none;border-radius:8px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;width:100%">Report another defect</button>
       </div>
     </div>`;
   }
   window.scrollTo(0,0);
 
-  // Run maint rules
+  // Email + rules in background after success screen is shown
+  const s=loadSettings();
+  const recipients=getEmailsForAction(actionType)||s.email_remake||s.email_rework||'';
+  if(s.ejs_service&&recipients){
+    sendNcrEmail(recipients,`[Solidcor Red Tag] ${finalFault} — ${area} — ${doorRef}`,buildNcrEmailHtml(newNCR,actionType)).catch(()=>{});
+  }
+  sendNcrAlertEmail(newNCR).catch(()=>{});
   setTimeout(()=>runTaskRules(newNCR),600);
 }
 
