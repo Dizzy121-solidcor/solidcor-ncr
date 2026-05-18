@@ -494,7 +494,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       </div>
       <div class="tbl-wrap">
         <div class="tbl-scroll"><table><thead><tr>
-          <th>NCR #</th><th>Date</th><th>Customer</th><th>Door ref</th><th>Issue</th><th>Cost</th><th>Status</th><th>Actions</th>
+          <th>NCR #</th><th>Date</th><th>Customer</th><th>Door ref</th><th>Issue</th><th>Cost</th><th>Contacted</th><th>Status</th><th>Actions</th>
         </tr></thead><tbody id="tbody-external"></tbody></table></div>
         <div class="tbl-footer" id="tfoot-external"></div>
       </div>
@@ -1425,8 +1425,10 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       </div>
       <div class="photo-grid" id="ncrPhotoGrid"></div>
     </div>
-    <div class="form-row"><label>Raised by <span class="req-star">*</span></label>
-      <input type="text" id="ncrRaisedBy" placeholder="Your name" readonly style="background:var(--faint)">
+    <div class="form-row"><label>Raised by (Solidcor staff member) <span class="req-star">*</span></label>
+      <input type="text" id="ncrRaisedBy" placeholder="Auto-filled from login" readonly
+        style="background:var(--faint);color:var(--text);font-weight:600"
+        title="Auto-filled with the logged-in user's name">
     </div>
     <div class="form-row"><label>Assigned to <span style="color:var(--muted);font-weight:400">(optional)</span></label>
       <select id="ncrAssignedTo" style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
@@ -1865,7 +1867,7 @@ const SUPERADMIN_PERMS=Object.fromEntries(ALL_PERMISSIONS.map(p=>[p.key,true]));
 function can(perm){return currentUser?.role==='superadmin'||!!currentUser?.permissions?.[perm];}
 
 function finishLogin(fromSession=false){
-  if(!fromSession) document.getElementById('ncrRaisedBy').value=currentUser.name||'';
+  if(!fromSession) document.getElementById('ncrRaisedBy').value=currentUser.name||currentUser.email||'';
   document.getElementById('userName').textContent=currentUser.name;
   document.getElementById('userAv').textContent=currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('userShift').textContent=currentUser.role==='superadmin'?'SuperAdmin':currentUser.role==='admin'?'Admin':currentUser.shift;
@@ -2480,6 +2482,10 @@ function renderTable(type){
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
         <td>${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
+        <td style="text-align:center">${r.customer_contacted
+          ?`<span title="Contacted ${r.customer_contacted.slice(0,10)} by ${r.contact_confirmed_by||'—'}" style="color:var(--green);font-size:16px">✓</span>`
+          :`<span onclick="event.stopPropagation();openContactedModal('${r.id}')" title="Not yet contacted — click to mark" style="color:var(--red);font-size:16px;cursor:pointer">✗</span>`
+        }</td>
         <td>${statusBadge(r.status)}</td>
         <td><button class="top-btn ghost" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();openAddAction('${r.id}')">+ Action</button></td>
       </tr>`;}).join('');
@@ -2533,13 +2539,48 @@ function openDetail(id){
   const ncrActs = actions.filter(a=>a.ncrId===id);
 
   document.getElementById('detailMain').innerHTML = `
+    <!-- Contact / submitter info panel -->
+    <div class="detail-card" style="margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">${r.type==='external'?'Customer contact':'Raised by (Solidcor)'}</div>
+          <div style="font-size:13px;font-weight:600">${esc(r.raised_by||r.raisedBy||'—')}</div>
+        </div>
+        ${r.contact_phone?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Phone</div>
+          <div style="font-size:13px"><a href="tel:${esc(r.contact_phone)}" style="color:var(--accent)">${esc(r.contact_phone)}</a></div>
+        </div>`:''}
+        ${r.customer_email?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Customer email</div>
+          <div style="font-size:13px"><a href="mailto:${esc(r.customer_email)}" style="color:var(--accent)">${esc(r.customer_email)}</a></div>
+        </div>`:''}
+        ${r.project_ref?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Project ref</div>
+          <div style="font-size:13px">${esc(r.project_ref)}</div>
+        </div>`:''}
+        ${r.so?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Sales order</div>
+          <div style="font-size:13px;font-family:var(--mono)">${esc(r.so)}</div>
+        </div>`:''}
+        ${r.door_ref?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Door ref</div>
+          <div style="font-size:13px;font-family:var(--mono)">${esc(r.door_ref)}</div>
+        </div>`:''}
+        ${r.dept?`<div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px">Department</div>
+          <div style="font-size:13px">${esc(r.dept)}</div>
+        </div>`:''}
+      </div>
+    </div>
+
     <div class="detail-card">
       <h4>Issue description</h4>
       <p style="font-size:14px;color:var(--text);line-height:1.6">${esc(r.issue||'No description')}</p>
       ${r.root_cause?`<div style="margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--r);font-size:12px"><span style="color:var(--muted);font-family:var(--mono)">ROOT CAUSE: </span>${esc(r.root_cause)}</div>`:''}
       ${r.action?`<div style="margin-top:8px;padding:10px;background:rgba(224,123,26,.06);border-left:2px solid var(--accent);font-size:12px;border-radius:var(--r)">${esc(r.action)}</div>`:''}
     </div>
-    ${r.corrective?`<div class="detail-card"><h4>Corrective actions (from log)</h4><p style="font-size:13px;color:var(--text)">${esc(r.corrective)}</p></div>`:''}
+    ${r.corrective?`<div class="detail-card" style="border-left:3px solid var(--green)"><h4 style="color:var(--green)">✅ Corrective action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.corrective)}</p></div>`:''}
+    ${r.preventive_action?`<div class="detail-card" style="border-left:3px solid #3b82f6"><h4 style="color:#3b82f6">🛡 Preventive action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.preventive_action)}</p></div>`:''}
     ${r.type==='external'?`
     <div class="detail-card" style="border-left:3px solid ${r.customer_contacted?'var(--green)':'#8b5cf6'}">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -3044,7 +3085,10 @@ function openRaiseNCR(){
   document.querySelectorAll('.equip-btn').forEach(b=>b.classList.remove('sel'));
   document.querySelectorAll('.raise-fault-btn').forEach(b=>b.classList.remove('sel'));
   ncrPhotos=[];
-  if(currentUser) document.getElementById('ncrRaisedBy').value=currentUser.name;
+  if(currentUser){
+    const displayName = currentUser.name||currentUser.email||'';
+    document.getElementById('ncrRaisedBy').value = displayName;
+  }
   renderNcrTemplates();
   populateAssignedTo();
   openModal('raiseModal');
@@ -4311,6 +4355,12 @@ function showExtNcrPortal(){
   const now = new Date();
   const local = new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   document.getElementById('ep_datetime').value = local;
+
+  // Pre-fill name from last visit on this device
+  const _savedExtName = localStorage.getItem('ncr_portal_name');
+  if(_savedExtName && document.getElementById('ep_name')){
+    document.getElementById('ep_name').value = _savedExtName;
+  }
 }
 
 function epTypeChange(){
@@ -4328,6 +4378,7 @@ async function submitExtNcrPortal(){
   const _matchP=findClosestCustomer(_rawCompP);
   const company=(_matchP&&_matchP.score<0.25)?_matchP.match:titleCase(_rawCompP);
   const name    = document.getElementById('ep_name').value.trim();
+  if(name) localStorage.setItem('ncr_portal_name', name);
   const phone   = document.getElementById('ep_phone').value.trim();
   const type    = document.getElementById('ep_type').value;
   const door    = document.getElementById('ep_door').value.trim();
@@ -5763,12 +5814,43 @@ function exportNcrPdf(id){
   </div>`:''}
 
   ${r.corrective?`
-  <!-- Corrective action -->
+  <!-- Corrective action (CAPA) -->
   <div class="section">
-    <div class="section-title">Corrective / rectification action</div>
+    <div class="section-title">Corrective action (CAPA)</div>
     <div class="issue-box" style="background:#eff6ff;color:#1e40af">${(r.corrective||'').replace(/\n/g,'<br>')}</div>
   </div>`:''}
 
+  ${r.preventive_action?`
+  <!-- Preventive action (CAPA) -->
+  <div class="section">
+    <div class="section-title">Preventive action (CAPA)</div>
+    <div class="issue-box" style="background:#f0fdf4;color:#166534">${(r.preventive_action||'').replace(/\n/g,'<br>')}</div>
+  </div>`:''}
+
+  ${r.rca_data && r.rca_method==='5whys'? (() => {
+    try{
+      const d=JSON.parse(r.rca_data);
+      if(!d.whys?.length) return '';
+      return `<div class="section"><div class="section-title">5 Whys analysis (AI)</div><table style="width:100%;border-collapse:collapse">
+        ${d.whys.map((w,i)=>`<tr><td style="padding:6px 10px;background:#f3f4f6;font-size:12px;font-weight:600;width:90px">Why ${i+1}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee"><div style="font-size:12px;color:#666">${w.q}</div><div style="font-size:13px;margin-top:3px">${w.a}</div></td></tr>`).join('')}
+      </table></div>`;
+    }catch(e){return '';}
+  })() : ''}
+
+  ${r.rca_data && r.rca_method==='fishbone'? (() => {
+    try{
+      const d=JSON.parse(r.rca_data);
+      if(!d.bones) return '';
+      const icons={Machine:'⚙️',Man:'👤',Method:'📋',Material:'📦',Measurement:'📏',Environment:'🌡'};
+      return `<div class="section"><div class="section-title">Ishikawa / Fishbone analysis (AI)</div>
+        ${Object.entries(d.bones).filter(([,v])=>v.length).map(([cat,causes])=>`
+          <div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:3px">${icons[cat]||''} ${cat}</div>
+          ${causes.map(c=>`<div style="font-size:12px;color:#6b7280;padding:2px 0 2px 12px">→ ${c}</div>`).join('')}</div>`).join('')}
+        ${d.most_likely_causes?.length?`<div style="background:#fff7ed;padding:8px 10px;border-radius:6px;margin-top:8px"><div style="font-size:11px;font-weight:600;color:#E07B1A;margin-bottom:4px">Most likely causes</div>${d.most_likely_causes.map(c=>`<div style="font-size:12px">→ ${c}</div>`).join('')}</div>`:''}
+      </div>`;
+    }catch(e){return '';}
+  })() : ''}
   ${ncrActions.length?`
   <!-- Actions log -->
   <div class="section">
@@ -6206,6 +6288,8 @@ async function addComment(ncrId){
   const inp=document.getElementById('commentInput');
   const text=(inp?.value||'').trim();
   if(!text) return;
+  const btn=document.querySelector(`button[onclick="addComment('${ncrId}')"]`);
+  if(btn){btn.disabled=true;btn.textContent='Posting…';}
   const comment={
     id:'cmt_'+Date.now(),
     ncr_id:ncrId,
@@ -6214,8 +6298,16 @@ async function addComment(ncrId){
     created_at:new Date().toISOString()
   };
   inp.value='';
-  await sbUps('ncr_comments',comment).catch(()=>{});
-  renderComments(ncrId);
+  try{
+    await sbUps('ncr_comments',comment);
+    renderComments(ncrId);
+  }catch(e){
+    // Table might not exist yet — show inline
+    inp.value=text;
+    const wrap=document.getElementById('commentsWrap');
+    if(wrap) wrap.innerHTML=`<div style="color:var(--red);font-size:12px;font-family:var(--mono);padding:8px">⚠️ Could not save comment — run the shared_data_tables.sql in Supabase first.</div>`;
+  }
+  if(btn){btn.disabled=false;btn.textContent='Post';}
 }
 
 async function renderComments(ncrId){
@@ -6661,6 +6753,14 @@ function showPublicPortal(){
   </div>
 </div>`;
   document.body.appendChild(wrap);
+  // Pre-fill name from last visit on this device
+  const _savedPortalName = localStorage.getItem('ncr_portal_name');
+  if(_savedPortalName){
+    setTimeout(()=>{
+      const inp=document.getElementById('p_name');
+      if(inp){ inp.value=_savedPortalName; inp.style.border='1px solid var(--accent)'; }
+    }, 100);
+  }
   _portalStep=1;
   portalUpdateFaults();
 }
@@ -6898,6 +6998,8 @@ function portalBuildConfirm(){
 
 async function submitPortalNCR(){
   const name=(document.getElementById('p_name')?.value||'').trim();
+  // Remember this name for next time on this device
+  if(name) localStorage.setItem('ncr_portal_name', name);
   const area=(document.getElementById('p_area')?.value||'').trim();
   const range=(document.getElementById('p_range')?.value||'').trim();
   const product=(document.getElementById('p_product')?.value||'').trim();
@@ -7171,6 +7273,10 @@ async function runRCA(ncrId, autoRun=false){
     r.date && r.date >= new Date(Date.now()-90*86400000).toISOString().slice(0,10)
   ).slice(0,5).map(r=>({date:r.date,issue:r.issue}));
 
+  // Load comments to include in analysis context
+  const comments = await loadComments(ncrId).catch(()=>[]);
+  const commentText = comments.length ? comments.map(c=>`${c.author}: ${c.text}`).join('\n') : null;
+
   try{
     const resp = await fetch('/.netlify/functions/rca-analysis', {
       method:'POST',
@@ -7182,7 +7288,8 @@ async function runRCA(ncrId, autoRun=false){
           customer: ncr.customer, units: ncr.units, raised_by: ncr.raised_by||ncr.raisedBy
         },
         method: _rcaMethod,
-        history: similar
+        history: similar,
+        comments: commentText
       })
     });
 
@@ -7298,7 +7405,10 @@ async function saveRcaToNcr(ncrId, encodedResult){
 
   const updates = {
     root_cause: r.root_cause||'',
-    corrective: [r.corrective_action, r.preventive_action].filter(Boolean).join('\n\nPreventive: ')
+    corrective: r.corrective_action||'',
+    preventive_action: r.preventive_action||'',
+    rca_method: _rcaMethod,
+    rca_data: JSON.stringify(r),  // full AI result saved for reference
   };
 
   try{
@@ -7318,11 +7428,8 @@ async function saveRcaToNcr(ncrId, encodedResult){
       note: `AI RCA (${_rcaMethod==='5whys'?'5 Whys':'Fishbone'}) — auto-generated`
     }).catch(()=>{});
 
-    showToast('✓ Root cause saved to NCR');
-    // Refresh detail side panel
-    document.getElementById('detailSide').querySelectorAll('[data-field=root_cause]').forEach(el=>{
-      el.textContent = r.root_cause;
-    });
+    showToast('✓ RCA saved to NCR — root cause, corrective & preventive actions');
+    openDetail(ncrId); // refresh to show saved data
 
   } catch(e){
     showToast('⚠️ Save failed: '+e.message);
