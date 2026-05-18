@@ -2637,7 +2637,7 @@ function openDetail(id){
         <input type="text" id="commentInput" placeholder="Add a comment or note…"
           onkeydown="if(event.key==='Enter')addComment('${id}')"
           style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
-        <button class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
+        <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
       </div>
     </div>
 
@@ -3079,28 +3079,38 @@ function pickRaiseFault(btn){
 }
 
 function openRaiseNCR(){
-  ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt','ncrIssue','ncrCustomerEmail','ncrDoorStyle'].forEach(id=>document.getElementById(id).value='');
+  // Clear all text/select fields
+  ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt',
+   'ncrIssue','ncrCustomerEmail','ncrDoorStyle','ncrAssignedTo'].forEach(id=>{
+    const el=document.getElementById(id);if(el) el.value='';
+  });
   document.getElementById('ncrType').value='Door';
   document.getElementById('ncrErrorType').value='';
   document.getElementById('ncrCategory').value='';
-  document.getElementById('ncrCategoryOther').value='';
-  document.getElementById('ncrCategoryOther').style.display='none';
+  const catOther=document.getElementById('ncrCategoryOther');
+  if(catOther){catOther.value='';catOther.style.display='none';}
   document.getElementById('ncrDept').value='';
-  document.getElementById('ncrUnits').value='';
+  document.getElementById('ncrUnits').value='1';
   document.getElementById('ncrCost').value='';
   document.getElementById('ncrAction').value='';
-  document.getElementById('ncrPhotoGrid').innerHTML='';
-  document.getElementById('remakeAlert').style.display='none';
-  document.getElementById('scanStatus').textContent='';
+  // Clear photos
+  const pg=document.getElementById('ncrPhotoGrid');if(pg)pg.innerHTML='';
+  ncrPhotos=[];
+  // Clear scan state
+  window._pendingDoorSheetImage=null;
+  const scanSt=document.getElementById('scanStatus');if(scanSt)scanSt.textContent='';
   const c1=document.getElementById('doorSheetInputCamera');if(c1)c1.value='';
   const c2=document.getElementById('doorSheetInputUpload');if(c2)c2.value='';
-  document.getElementById('raiseFaultWrap').style.display='none';
+  // Reset buttons
+  const ra=document.getElementById('remakeAlert');if(ra)ra.style.display='none';
+  const fw=document.getElementById('raiseFaultWrap');if(fw)fw.style.display='none';
   document.querySelectorAll('.equip-btn').forEach(b=>b.classList.remove('sel'));
   document.querySelectorAll('.raise-fault-btn').forEach(b=>b.classList.remove('sel'));
-  ncrPhotos=[];
+  // Close customer dropdown
+  hideCustomerDrop();
+  // Set raised by from logged-in user
   if(currentUser){
-    const displayName = currentUser.name||currentUser.email||'';
-    document.getElementById('ncrRaisedBy').value = displayName;
+    document.getElementById('ncrRaisedBy').value=currentUser.name||currentUser.email||'';
   }
   renderNcrTemplates();
   populateAssignedTo();
@@ -6302,12 +6312,30 @@ async function loadComments(ncrId){
   return await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`).catch(()=>[]);
 }
 
+const _localComments = {}; // in-memory cache keyed by ncr_id
+
+async function loadComments(ncrId){
+  try{
+    const rows = await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`);
+    // Merge with any local-only comments
+    const local = _localComments[ncrId]||[];
+    const dbIds = new Set((rows||[]).map(r=>r.id));
+    const merged = [...(rows||[]), ...local.filter(c=>!dbIds.has(c.id))];
+    merged.sort((a,b)=>a.created_at.localeCompare(b.created_at));
+    return merged;
+  }catch(e){
+    // Table doesn't exist — return local-only comments
+    return _localComments[ncrId]||[];
+  }
+}
+
 async function addComment(ncrId){
   const inp=document.getElementById('commentInput');
   const text=(inp?.value||'').trim();
   if(!text) return;
-  const btn=document.querySelector(`button[onclick="addComment('${ncrId}')"]`);
+  const btn=document.getElementById('commentPostBtn');
   if(btn){btn.disabled=true;btn.textContent='Posting…';}
+
   const comment={
     id:'cmt_'+Date.now(),
     ncr_id:ncrId,
@@ -6315,25 +6343,33 @@ async function addComment(ncrId){
     author:currentUser?.name||currentUser?.email||'Unknown',
     created_at:new Date().toISOString()
   };
+
+  // Add to local store immediately so it shows even if DB fails
+  if(!_localComments[ncrId]) _localComments[ncrId]=[];
+  _localComments[ncrId].push(comment);
   inp.value='';
-  try{
-    await sbUps('ncr_comments',comment);
-    renderComments(ncrId);
-  }catch(e){
-    // Table might not exist yet — show inline
-    inp.value=text;
-    const wrap=document.getElementById('commentsWrap');
-    if(wrap) wrap.innerHTML=`<div style="color:var(--red);font-size:12px;font-family:var(--mono);padding:8px">⚠️ Could not save comment — run the shared_data_tables.sql in Supabase first.</div>`;
-  }
+  renderComments(ncrId); // show immediately from local
+
+  // Save to DB in background
+  sbUps('ncr_comments',comment).catch(e=>{
+    console.warn('Comment save failed (table may not exist):', e.message);
+  });
+
   if(btn){btn.disabled=false;btn.textContent='Post';}
 }
 
 async function renderComments(ncrId){
   const wrap=document.getElementById('commentsWrap');
   if(!wrap) return;
-  const comments=await loadComments(ncrId);
+
+  // Merge DB comments with local (in case DB table doesn't exist yet)
+  let dbComments=[];
+  try{ dbComments=await loadComments(ncrId)||[]; }catch(e){}
+  const local=(_localComments[ncrId]||[]).filter(lc=>!dbComments.find(dc=>dc.id===lc.id));
+  const comments=[...dbComments,...local].sort((a,b)=>a.created_at.localeCompare(b.created_at));
+
   if(!comments.length){
-    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0">No comments yet.</div>';
+    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0">No comments yet — add one below.</div>';
     return;
   }
   wrap.innerHTML=comments.map(c=>`
