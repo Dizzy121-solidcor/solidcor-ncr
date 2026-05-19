@@ -2903,9 +2903,9 @@ function openDetail(id){
     <div class="detail-card collapsible-card">
       <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
         <span>💬 Comments</span>
-        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
+        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▾</span>
       </h4>
-      <div class="collapsible-body" style="display:none;margin-top:10px">
+      <div class="collapsible-body" style="display:block;margin-top:10px">
         <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
         <div style="display:flex;gap:8px">
           <input type="text" id="commentInput" placeholder="Add a comment or note…"
@@ -2918,10 +2918,10 @@ function openDetail(id){
 
     <div class="detail-card collapsible-card" id="doorSheetCard">
       <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin:0">
-        <span>📎 Attachments</span>
+        <span>📎 Attachments <span id="attachCount" style="font-weight:400;color:var(--muted);font-size:11px;font-family:var(--mono);margin-left:6px"></span></span>
         <span style="display:flex;align-items:center;gap:10px">
           <label onclick="event.stopPropagation()" style="cursor:pointer">
-            <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
+            <input type="file" id="attachFileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
             <span class="top-btn ghost" style="font-size:11px;padding:4px 10px">+ Add files</span>
           </label>
           <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
@@ -2933,7 +2933,7 @@ function openDetail(id){
           ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
           ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
           ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleAttachmentDrop(event,'${id}')"
-          onclick="this.previousElementSibling.querySelector('input').click()">
+          onclick="document.getElementById('attachFileInput').click()">
           Drag &amp; drop images, PDFs, emails or docs here
         </div>
         <div id="attachmentsList" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
@@ -3144,6 +3144,9 @@ async function loadNcrAttachments(ncrId){
   const el = document.getElementById('attachmentsList');
   if(!el) return;
   const imgs = await loadNcrImages(ncrId);
+  // Surface count in the collapsed card heading so users know there's content
+  const countEl = document.getElementById('attachCount');
+  if(countEl) countEl.textContent = (imgs && imgs.length) ? `(${imgs.length})` : '';
   if(!imgs||!imgs.length){
     el.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No attachments yet — drag files above or click "+ Add files"</div>';
     return;
