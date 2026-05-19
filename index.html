@@ -425,8 +425,14 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
 
-      <!-- Bottom row -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+      <!-- Bottom row — secondary charts, collapsed by default to reduce clutter -->
+      <div style="margin-top:14px">
+        <button type="button" id="dashChartsToggle" onclick="toggleDashCharts()"
+          style="width:100%;background:none;border:1px dashed var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:11px;padding:8px 12px;cursor:pointer;text-align:left;letter-spacing:.05em">
+          + Show charts (weekly trend · top fault categories · error type breakdown)
+        </button>
+      </div>
+      <div id="dashChartsWrap" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
         <div class="detail-card" style="overflow-y:auto">
           <h4>Weekly trend</h4>
           <div class="bar-chart" id="deptChart"></div>
@@ -1360,25 +1366,57 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="Safety">⚠️ Safety</option>
         </select>
       </div>
-      <div class="form-row"><label>Door style</label>
-        <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
+    </div>
+
+    <!-- More details — optional categorisation, defaults to collapsed -->
+    <div style="margin:6px 0 14px">
+      <button type="button" id="raiseMoreToggle" onclick="toggleRaiseMore()"
+        style="background:none;border:1px dashed var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:11px;padding:7px 12px;cursor:pointer;width:100%;text-align:left;letter-spacing:.05em">
+        + Show optional details (error type, door style, colours, units, cost)
+      </button>
+    </div>
+    <div id="raiseMoreWrap" style="display:none">
+      <div class="form-cols">
+        <div class="form-row"><label>Error type</label>
+          <select id="ncrErrorType">
+            <option value="">— select —</option>
+            <option value="Human Error">👤 Human error</option>
+            <option value="Machine Error">⚙️ Machine error</option>
+            <option value="Process Error">📋 Process error</option>
+            <option value="Design Error">📐 Design error</option>
+            <option value="Supplier Error">📦 Supplier error</option>
+            <option value="System Error">💻 System error</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Door style</label>
+          <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
+        </div>
+      </div>
+      <div class="form-cols">
+        <div class="form-row"><label>Door type</label>
+          <input type="text" id="ncrDoorType" placeholder="T30, T60, R30…">
+        </div>
+        <div class="form-row"><label>Internal colour</label>
+          <input type="text" id="ncrColourInt" placeholder="e.g. White, Grey…">
+        </div>
+        <div class="form-row"><label>External colour</label>
+          <input type="text" id="ncrColourExt" placeholder="e.g. Black, Anthracite…">
+        </div>
+      </div>
+      <div class="form-cols">
+        <div class="form-row"><label>Unit count</label>
+          <input type="number" id="ncrUnits" placeholder="1" min="0">
+        </div>
+        <div class="form-row"><label>Estimated cost (£)</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="ncrCost" placeholder="0.00" step="0.01" style="flex:1">
+            <button type="button" class="ghost sm" onclick="openCompPicker()" title="Pick from components list" style="white-space:nowrap">🧩 Pick</button>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Door / slab number <span class="req-star">*</span></label>
-        <input type="text" id="ncrDoorRef" placeholder="e.g. 5929-0113D">
-      </div>
-      <div class="form-row"><label>Door type</label>
-        <input type="text" id="ncrDoorType" placeholder="T30, T60, R30…">
-      </div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Internal colour</label>
-        <input type="text" id="ncrColourInt" placeholder="e.g. White, Grey…">
-      </div>
-      <div class="form-row"><label>External colour</label>
-        <input type="text" id="ncrColourExt" placeholder="e.g. Black, Anthracite…">
-      </div>
+    <div class="form-row"><label>Door / slab number <span class="req-star">*</span></label>
+      <input type="text" id="ncrDoorRef" placeholder="e.g. 5929-0113D">
     </div>
     <div class="form-row"><label>Issue description <span class="req-star">*</span></label>
       <textarea id="ncrIssue" rows="3" placeholder="Describe the defect or issue clearly…"></textarea>
@@ -1413,17 +1451,6 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <input type="hidden" id="ncrCategory">
         <input type="text" id="ncrCategoryOther" placeholder="Describe the fault type…"
           style="display:none;margin-top:8px;width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);box-sizing:border-box">
-      </div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Unit count</label>
-        <input type="number" id="ncrUnits" placeholder="1" min="0">
-      </div>
-      <div class="form-row"><label>Estimated cost (£)</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input type="number" id="ncrCost" placeholder="0.00" step="0.01" style="flex:1">
-          <button type="button" class="ghost sm" onclick="openCompPicker()" title="Pick from components list" style="white-space:nowrap">🧩 Pick</button>
-        </div>
       </div>
     </div>
     <div class="form-row"><label>Action to rectify</label>
@@ -2090,11 +2117,28 @@ function finishLogin(fromSession=false){
 
 function applyPermissions(){
   const p=currentUser?.permissions||{};
+  // Top group — viewing NCRs and actions
   const map={
     'nav-dashboard':p.view_dashboard,'nav-all':p.view_all,
     'nav-external':p.view_external,'nav-internal':p.view_internal,
     'nav-actions':p.view_actions,'nav-returns':p.view_returns,
-    'nav-raise':p.raise_ncr,'nav-portal':true,
+    // Reports group — gated by view_dashboard. Customer-facing reports
+    // need view_external since they include customer NCR detail.
+    'nav-mgmtdash':p.view_dashboard,
+    'nav-slatracker':p.view_dashboard,
+    'nav-deliveries':p.view_dashboard,
+    'nav-reports':p.view_dashboard,
+    'nav-customerreport':p.view_external,
+    // Raise group — gated by raise_ncr permission
+    'nav-intncrqr':p.raise_ncr,
+    'nav-extncrqr':p.raise_ncr,
+    'nav-extncrform':p.raise_ncr,
+    'nav-raise':p.raise_ncr,
+    'nav-returnscan':p.view_returns,
+    // Admin group
+    'nav-import':p.manage_settings,
+    'nav-stocklist':p.manage_settings,
+    'nav-portal':true,  // public portal link visible to everyone
     'nav-components':p.manage_components,'nav-portalconfig':p.manage_portal,
     'nav-users':p.manage_users,'nav-settings':p.manage_settings,
   };
@@ -2846,39 +2890,54 @@ function openDetail(id){
           </div>
         </div>`).join(''):'<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No actions yet</div>'}
     </div>
-    <div class="detail-card" id="auditTrailCard">
-      <h4>Edit history</h4>
-      <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
-    </div>
-
-    <div class="detail-card">
-      <h4>💬 Comments</h4>
-      <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="commentInput" placeholder="Add a comment or note…"
-          onkeydown="if(event.key==='Enter')addComment('${id}')"
-          style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
-        <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
+    <div class="detail-card collapsible-card" id="auditTrailCard">
+      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+        <span>Edit history</span>
+        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
+      </h4>
+      <div class="collapsible-body" style="display:none;margin-top:10px">
+        <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
       </div>
     </div>
 
-    <div class="detail-card" id="doorSheetCard">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <h4 style="margin:0">📎 Attachments</h4>
-        <label style="cursor:pointer">
-          <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
-          <span class="top-btn ghost" style="font-size:11px;padding:4px 10px">+ Add files</span>
-        </label>
+    <div class="detail-card collapsible-card">
+      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+        <span>💬 Comments</span>
+        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
+      </h4>
+      <div class="collapsible-body" style="display:none;margin-top:10px">
+        <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="commentInput" placeholder="Add a comment or note…"
+            onkeydown="if(event.key==='Enter')addComment('${id}')"
+            style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
+          <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
+        </div>
       </div>
-      <div id="attachDropZone" data-ncrid="${id}"
-        style="border:2px dashed var(--border2);border-radius:var(--r);padding:16px;text-align:center;color:var(--muted);font-size:12px;font-family:var(--mono);margin-bottom:10px;transition:all .15s;cursor:pointer"
-        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
-        ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
-        ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleAttachmentDrop(event,'${id}')"
-        onclick="this.previousElementSibling.querySelector('input').click()">
-        Drag &amp; drop images, PDFs, emails or docs here
+    </div>
+
+    <div class="detail-card collapsible-card" id="doorSheetCard">
+      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin:0">
+        <span>📎 Attachments</span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <label onclick="event.stopPropagation()" style="cursor:pointer">
+            <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
+            <span class="top-btn ghost" style="font-size:11px;padding:4px 10px">+ Add files</span>
+          </label>
+          <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
+        </span>
+      </h4>
+      <div class="collapsible-body" style="display:none;margin-top:10px">
+        <div id="attachDropZone" data-ncrid="${id}"
+          style="border:2px dashed var(--border2);border-radius:var(--r);padding:16px;text-align:center;color:var(--muted);font-size:12px;font-family:var(--mono);margin-bottom:10px;transition:all .15s;cursor:pointer"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
+          ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
+          ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleAttachmentDrop(event,'${id}')"
+          onclick="this.previousElementSibling.querySelector('input').click()">
+          Drag &amp; drop images, PDFs, emails or docs here
+        </div>
+        <div id="attachmentsList" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
       </div>
-      <div id="attachmentsList" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
     </div>
 
     <div class="detail-card" id="rcaCard">
@@ -3366,7 +3425,34 @@ function pickRaiseFault(btn){
   if(isOther) otherInput.focus();
 }
 
+function toggleRaiseMore(){
+  const wrap = document.getElementById('raiseMoreWrap');
+  const btn  = document.getElementById('raiseMoreToggle');
+  if(!wrap||!btn) return;
+  const isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  btn.textContent = isOpen
+    ? '+ Show optional details (error type, door style, colours, units, cost)'
+    : '− Hide optional details';
+}
+
+function toggleDashCharts(){
+  const wrap = document.getElementById('dashChartsWrap');
+  const btn  = document.getElementById('dashChartsToggle');
+  if(!wrap||!btn) return;
+  const isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'grid';
+  btn.textContent = isOpen
+    ? '+ Show charts (weekly trend · top fault categories · error type breakdown)'
+    : '− Hide charts';
+}
+
 function openRaiseNCR(){
+  // Reset the 'More details' expander every time the modal opens
+  const moreWrap = document.getElementById('raiseMoreWrap');
+  const moreBtn  = document.getElementById('raiseMoreToggle');
+  if(moreWrap) moreWrap.style.display='none';
+  if(moreBtn)  moreBtn.textContent='+ Show optional details (error type, door style, colours, units, cost)';
   // Clear all text/select fields
   ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt',
    'ncrIssue','ncrCustomerEmail','ncrDoorStyle','ncrAssignedTo'].forEach(id=>{
@@ -5977,6 +6063,19 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 function fmtDate(d){if(!d||d==='None')return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}catch{return d;}}
 function statusCls(s){return s==='open'?'b-open':s==='closed'?'b-closed':'b-progress';}
 function statusBadge(s){const labels={open:'Open',closed:'Closed',inprogress:'In Progress'};return`<span class="badge ${statusCls(s)}">${labels[s]||s||'Open'}</span>`;}
+
+// Click handler for collapsible detail cards. The header is the clickable
+// element; the body is the immediately-following .collapsible-body div.
+function toggleCollapsible(headerEl){
+  const card = headerEl.closest('.collapsible-card');
+  if(!card) return;
+  const body = card.querySelector('.collapsible-body');
+  const chev = card.querySelector('.collapsible-chev');
+  if(!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if(chev) chev.textContent = isOpen ? '▸' : '▾';
+}
 
 // Tiny visual indicator for severity. Designed to sit inline before issue text without taking a column.
 function severityDot(sev){
