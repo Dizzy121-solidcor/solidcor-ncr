@@ -1352,6 +1352,14 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="System Error">💻 System error</option>
         </select>
       </div>
+      <div class="form-row"><label>Severity <span class="req-star">*</span></label>
+        <select id="ncrSeverity">
+          <option value="Minor">🟢 Minor</option>
+          <option value="Major" selected>🟠 Major</option>
+          <option value="Critical">🔴 Critical</option>
+          <option value="Safety">⚠️ Safety</option>
+        </select>
+      </div>
       <div class="form-row"><label>Door style</label>
         <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
       </div>
@@ -1534,8 +1542,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
   <div class="modal">
     <h3>↩️ Log Return</h3>
     <div class="form-cols">
-      <div class="form-row"><label>NCR number</label>
-        <input type="text" id="retNcr" placeholder="NCR26-001" list="ncrList">
+      <div class="form-row"><label>NCR number <span style="color:var(--muted);font-weight:400;font-size:11px">(optional — leave blank to auto-create)</span></label>
+        <input type="text" id="retNcr" placeholder="NCR26-001 — or leave blank" list="ncrList">
         <datalist id="ncrList"></datalist>
       </div>
       <div class="form-row"><label>Customer</label>
@@ -1584,8 +1592,29 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     <div class="form-row"><label>Root cause</label>
       <textarea id="editRootCause" rows="2" style="resize:vertical"></textarea>
     </div>
-    <div class="form-row"><label>Corrective action</label>
+    <div class="form-row"><label>Corrective action <span style="color:var(--muted);font-weight:400;font-size:11px">(fixes the immediate problem)</span></label>
       <textarea id="editCorrective" rows="2" style="resize:vertical"></textarea>
+    </div>
+    <div class="form-row"><label>Preventive action <span style="color:var(--muted);font-weight:400;font-size:11px">(stops it happening again — ISO 9001 §10.2)</span></label>
+      <textarea id="editPreventive" rows="2" style="resize:vertical"></textarea>
+    </div>
+    <div class="form-cols">
+      <div class="form-row"><label>Effectiveness review due</label>
+        <input type="date" id="editEffDue">
+      </div>
+      <div class="form-row"><label>Effectiveness review date</label>
+        <input type="date" id="editEffDate">
+      </div>
+      <div class="form-row"><label>Effectiveness outcome</label>
+        <select id="editEffOutcome">
+          <option value="">— not reviewed —</option>
+          <option value="effective">✅ Effective</option>
+          <option value="ineffective">⚠️ Ineffective — re-open</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row"><label>Effectiveness review notes</label>
+      <textarea id="editEffNotes" rows="2" style="resize:vertical" placeholder="What evidence proves the action worked (or didn't)?"></textarea>
     </div>
     <div class="form-cols">
       <div class="form-row"><label>Category</label>
@@ -1614,6 +1643,15 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="Design Error">📐 Design error</option>
           <option value="Supplier Error">📦 Supplier error</option>
           <option value="System Error">💻 System error</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Severity</label>
+        <select id="editSeverity">
+          <option value="">— not set —</option>
+          <option value="Minor">🟢 Minor</option>
+          <option value="Major">🟠 Major</option>
+          <option value="Critical">🔴 Critical</option>
+          <option value="Safety">⚠️ Safety</option>
         </select>
       </div>
     </div>
@@ -2318,6 +2356,26 @@ function renderDashboard(){
   const internal = ncrRecords.filter(r=>r.type==='internal');
   const extOpen = external.filter(r=>r.status==='open').length;
   const intOpen = internal.filter(r=>r.status==='open').length;
+  // Cost month-to-date plus same-period-last-month comparison for trend arrow
+  const _now = new Date();
+  const _monthStart = new Date(_now.getFullYear(), _now.getMonth(), 1);
+  const _prevMonthStart = new Date(_now.getFullYear(), _now.getMonth()-1, 1);
+  const _prevMonthSamePoint = new Date(_now.getFullYear(), _now.getMonth()-1, _now.getDate());
+  const _sumCost = (start, end) =>
+    ncrRecords.filter(r=>!r.legacy && r.date && new Date(r.date) >= start && new Date(r.date) < end)
+              .reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
+  const costMTD = _sumCost(_monthStart, _now);
+  const costPrevMTDsamePoint = _sumCost(_prevMonthStart, _prevMonthSamePoint);
+  const costDelta = costPrevMTDsamePoint
+    ? Math.round(((costMTD - costPrevMTDsamePoint) / costPrevMTDsamePoint) * 100)
+    : null;
+  const costTrend = costDelta===null ? ''
+    : (costDelta > 0
+        ? `<span style="color:var(--red)">▲ ${costDelta}% vs last month</span>`
+        : costDelta < 0
+          ? `<span style="color:var(--green)">▼ ${Math.abs(costDelta)}% vs last month</span>`
+          : `<span style="color:var(--muted)">— flat vs last month</span>`);
+  // Keep all-time total available — used elsewhere in reports
   const totalCost = ncrRecords.reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
   const actPending = actions.filter(a=>a.status!=='done').length;
   const returnsOpen = returns.filter(r=>r.status==='pending'||r.status==='open').length;
@@ -2375,9 +2433,9 @@ function renderDashboard(){
       <div class="stat-sub">${SLA_DAYS}-day external target</div>
     </div>
     <div class="stat-card">
-      <div class="stat-val">£${totalCost.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
-      <div class="stat-label">Total NCR cost</div>
-      <div class="stat-sub">excl. legacy</div>
+      <div class="stat-val">£${costMTD.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="stat-label">Cost of quality (MTD)</div>
+      <div class="stat-sub">${costTrend||'no comparable period'}</div>
     </div>
   `;
 
@@ -2611,7 +2669,7 @@ function renderTable(type){
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
-        <td style="max-width:200px">${esc((r.issue||'').slice(0,55))}${(r.issue||'').length>55?'…':''}</td>
+        <td style="max-width:200px">${severityDot(r.severity)}${esc((r.issue||'').slice(0,55))}${(r.issue||'').length>55?'…':''}</td>
         <td style="font-size:12px;color:var(--muted)">${esc(r.raised_by||r.raisedBy||'—')}</td>
         <td><span class="badge b-dept">${esc(r.dept||'—')}</span></td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
@@ -2631,7 +2689,7 @@ function renderTable(type){
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
-        <td>${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
+        <td>${severityDot(r.severity)}${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td style="text-align:center">${r.customer_contacted
           ?`<span title="Contacted ${r.customer_contacted.slice(0,10)} by ${r.contact_confirmed_by||'—'}" style="color:var(--green);font-size:16px">✓</span>`
@@ -2651,7 +2709,7 @@ function renderTable(type){
         <td class="ncr-num">${esc(r.id)}</td>
         <td class="mono">${fmtDate(r.date)}</td>
         <td style="font-weight:500">${esc(r.raised_by||r.raisedBy||'—')}</td>
-        <td>${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
+        <td>${severityDot(r.severity)}${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
         <td><span class="badge b-dept">${esc(r.dept||'—')}</span></td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td>${statusBadge(r.status)}</td>
@@ -2687,7 +2745,7 @@ function openDetail(id){
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteNcr('${id}')">🗑 Delete</button>` : ''}
   `;
 
-  const ncrActs = actions.filter(a=>a.ncrId===id);
+  const ncrActs = actions.filter(a=>(a.ncr_id||a.ncrId)===id);
 
   document.getElementById('detailMain').innerHTML = `
     <!-- Contact / submitter info panel -->
@@ -2734,13 +2792,29 @@ function openDetail(id){
     </div>
 
     <div class="detail-card">
-      <h4>Issue description</h4>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h4 style="margin:0">Issue description</h4>
+        ${r.severity?severityBadge(r.severity):''}
+      </div>
       <p style="font-size:14px;color:var(--text);line-height:1.6">${esc(r.issue||'No description')}</p>
       ${r.root_cause?`<div style="margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--r);font-size:12px"><span style="color:var(--muted);font-family:var(--mono)">ROOT CAUSE: </span>${esc(r.root_cause)}</div>`:''}
       ${r.action?`<div style="margin-top:8px;padding:10px;background:rgba(224,123,26,.06);border-left:2px solid var(--accent);font-size:12px;border-radius:var(--r)">${esc(r.action)}</div>`:''}
     </div>
     ${r.corrective?`<div class="detail-card" style="border-left:3px solid var(--green)"><h4 style="color:var(--green)">✅ Corrective action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.corrective)}</p></div>`:''}
     ${r.preventive_action?`<div class="detail-card" style="border-left:3px solid #3b82f6"><h4 style="color:#3b82f6">🛡 Preventive action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.preventive_action)}</p></div>`:''}
+    ${(r.effectiveness_review_due||r.effectiveness_review_date)?`
+    <div class="detail-card" style="border-left:3px solid ${r.effectiveness_review_outcome==='effective'?'var(--green)':r.effectiveness_review_outcome==='ineffective'?'var(--red)':'#8b5cf6'}">
+      <h4 style="margin:0 0 8px;color:${r.effectiveness_review_outcome==='effective'?'var(--green)':r.effectiveness_review_outcome==='ineffective'?'var(--red)':'#8b5cf6'}">
+        🔁 Effectiveness review
+        ${r.effectiveness_review_outcome==='effective'?' — ✅ Effective':r.effectiveness_review_outcome==='ineffective'?' — ⚠️ Ineffective':' — pending'}
+      </h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;font-size:12px">
+        ${r.effectiveness_review_due?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Due</div><div>${r.effectiveness_review_due}</div></div>`:''}
+        ${r.effectiveness_review_date?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Reviewed</div><div>${r.effectiveness_review_date}</div></div>`:''}
+        ${r.effectiveness_review_by?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Reviewer</div><div>${esc(r.effectiveness_review_by)}</div></div>`:''}
+      </div>
+      ${r.effectiveness_review_notes?`<div style="margin-top:8px;padding:10px;background:var(--surface);border-radius:var(--r);font-size:13px;line-height:1.5">${esc(r.effectiveness_review_notes)}</div>`:''}
+    </div>`:''}
     ${r.type==='external'?`
     <div class="detail-card" style="border-left:3px solid ${r.customer_contacted?'var(--green)':'#8b5cf6'}">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -2764,8 +2838,8 @@ function openDetail(id){
         <div class="action-item">
           <div class="action-dot ${a.status==='done'?'done':a.status==='inprogress'?'pending':''}"></div>
           <div class="action-content" style="flex:1">
-            <div class="action-text">${esc(a.desc)}</div>
-            <div class="action-meta">${esc(a.dept||'—')} · Assigned: ${esc(a.assigned||'—')} · Due: ${a.due||'—'}</div>
+            <div class="action-text">${esc(a.description||a.desc||'')}</div>
+            <div class="action-meta">${esc(a.dept||'—')} · Assigned: ${esc(a.assigned||'—')} · Due: ${(a.due_date||a.due)||'—'}</div>
           </div>
           <div style="display:flex;gap:4px">
             <button class="top-btn ghost" style="padding:2px 8px;font-size:10px" onclick="toggleActionStatus('${a.id}')">${a.status==='done'?'↩ Reopen':'✓ Done'}</button>
@@ -3115,24 +3189,30 @@ function renderActions(){
   const search=(document.getElementById('actSearch')?.value||'').toLowerCase();
   const dept=document.getElementById('actDept')?.value||'';
   const stat=document.getElementById('actStatus')?.value||'';
+  // Helpers — actions loaded from Supabase have snake_case fields; in-memory
+  // freshly-created actions also have legacy camelCase. Always read both.
+  const aDesc = a => a.description || a.desc || '';
+  const aDue  = a => a.due_date    || a.due  || '';
+  const aNcr  = a => a.ncr_id      || a.ncrId|| '';
   let rows=actions.filter(a=>{
-    if(search&&![a.ncrId,a.desc,a.assigned,a.dept].join(' ').toLowerCase().includes(search))return false;
+    if(search&&![aNcr(a),aDesc(a),a.assigned,a.dept].join(' ').toLowerCase().includes(search))return false;
     if(dept&&a.dept!==dept)return false;
     if(stat&&a.status!==stat)return false;
     return true;
-  }).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999'));
+  }).sort((a,b)=>(aDue(a)||'9999').localeCompare(aDue(b)||'9999'));
   const tbody=document.getElementById('tbody-actions');
   const ncr=(id)=>ncrRecords.find(r=>r.id===id)||{};
   tbody.innerHTML=rows.map(a=>{
-    const r=ncr(a.ncrId);
+    const ncrId=aNcr(a);
+    const r=ncr(ncrId);
     const dotCol=a.status==='done'?'var(--green)':a.status==='inprogress'?'var(--amber)':'var(--red)';
     return`<tr>
-      <td class="ncr-num" onclick="openDetail('${a.ncrId}')" style="cursor:pointer">${esc(a.ncrId)}</td>
+      <td class="ncr-num" onclick="openDetail('${ncrId}')" style="cursor:pointer">${esc(ncrId||'—')}</td>
       <td>${esc(r.customer||'—')}</td>
-      <td>${esc(a.desc)}</td>
+      <td>${esc(aDesc(a)||'—')}</td>
       <td><span class="badge b-dept">${esc(a.dept||'—')}</span></td>
       <td>${esc(a.assigned||'—')}</td>
-      <td class="mono">${a.due||'—'}</td>
+      <td class="mono">${aDue(a)||'—'}</td>
       <td><span class="badge" style="background:${dotCol}22;color:${dotCol}">${a.status}</span></td>
       <td><button class="top-btn ghost" style="padding:2px 8px;font-size:10px" onclick="toggleActionStatus('${a.id}')">${a.status==='done'?'↩':'✓ Done'}</button></td>
     </tr>`;
@@ -3149,16 +3229,56 @@ function openAddReturn(){
   document.getElementById('retNotes').value='';
   openModal('returnModal');
 }
-function saveReturn(){
+async function saveReturn(){
   const doorRef=document.getElementById('retDoorRef').value.trim();
   if(!doorRef){showToast('⚠️ Door reference is required');return;}
+
+  let linkedNcrId = document.getElementById('retNcr').value.trim()||null;
+  const customer = document.getElementById('retCustomer').value.trim();
+  const retType  = document.getElementById('retType').value;
+  const retDate  = document.getElementById('retDate').value||new Date().toISOString().slice(0,10);
+  const retNotes = document.getElementById('retNotes').value.trim();
+
+  // If no NCR linked, auto-create a stub external NCR so every return
+  // has a traceable parent. This stops the Returns log drifting out of
+  // sync with the NCR log over time.
+  if(!linkedNcrId){
+    const stubId = genNCRId(retDate);
+    const stubIssue = `Auto-created from return (${retType}) — door ${doorRef}` +
+                      (retNotes ? `. Notes: ${retNotes}` : '. No notes provided.');
+    const stub = {
+      id: stubId, date: retDate,
+      customer: customer || 'Unknown',
+      door_ref: doorRef,
+      ncr_type: 'Door',
+      issue: stubIssue,
+      type: 'external', status: 'open',
+      category: 'Return — '+retType,
+      dept: 'External',
+      cost: 0, transport: 0,
+      root_cause: '', corrective: '', completed: null,
+      legacy: false, error_type: null,
+      severity: retType==='credit' ? 'Major' : (retType==='inspect' ? 'Minor' : 'Major'),
+      raised_by: currentUser?.name || 'System (auto)',
+      source: 'auto_from_return'
+    };
+    ncrRecords.unshift(stub);
+    await sbUps('ncr_records', stub).catch(()=>{
+      const saved=JSON.parse(localStorage.getItem('ncr_new')||'[]');
+      saved.push(stub); localStorage.setItem('ncr_new',JSON.stringify(saved));
+    });
+    linkedNcrId = stubId;
+    // Refresh the NCR tables so the new stub is visible immediately
+    renderTable('all'); renderTable('external');
+    showToast(`✓ Created NCR ${stubId} for this return`);
+  }
+
   const ret={
     id:'ret_'+Date.now(),
-    ncr_id:document.getElementById('retNcr').value.trim()||null,
-    customer:document.getElementById('retCustomer').value.trim(),
-    door_ref:doorRef, type:document.getElementById('retType').value,
-    date:document.getElementById('retDate').value||new Date().toISOString().slice(0,10),
-    notes:document.getElementById('retNotes').value.trim(),
+    ncr_id: linkedNcrId,
+    customer, door_ref:doorRef, type: retType,
+    date: retDate,
+    notes: retNotes,
     status:'pending'
   };
   returns.push(ret);
@@ -3404,6 +3524,7 @@ function submitNCR(){
     door_style:document.getElementById('ncrDoorStyle').value.trim(),
     ncr_type:document.getElementById('ncrType').value||'Door',
     error_type:document.getElementById('ncrErrorType').value||null,
+    severity:document.getElementById('ncrSeverity')?.value||'Major',
     customer_email:document.getElementById('ncrCustomerEmail').value.trim(),
     colour_int:document.getElementById('ncrColourInt').value.trim(),
     colour_ext:document.getElementById('ncrColourExt').value.trim(),
@@ -4683,18 +4804,42 @@ async function submitExtNcrPortal(){
     source:'external_portal'
   };
 
-  // Save to Supabase directly (no auth needed — anon key allows insert)
+  // Submit through the rate-limited Netlify function. Falls back to a
+  // direct Supabase POST only if the function isn't deployed yet — this
+  // makes the deploy step non-blocking.
+  const honeypotVal = (document.getElementById('ep_website')||{}).value || '';
   try{
-    const r = await fetch(SURL+'/rest/v1/ncr_records',{
+    const r = await fetch('/.netlify/functions/submit-public-ncr',{
       method:'POST',
-      headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify(rec)
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ ncr: rec, website: honeypotVal })
     });
-    if(!r.ok){
-      const t=await r.text();
+    if(r.status === 429){
+      // Server rate-limit hit. Read the retry-after for a friendlier message.
+      let retrySec = 0;
+      try{ const j=await r.json(); retrySec=j.retryAfterSec||0; }catch(_){}
+      const mins = Math.max(1, Math.ceil(retrySec/60));
+      err.textContent = `⚠️ Too many submissions from your network. Please try again in ${mins} minute${mins===1?'':'s'} — or call us directly if this is urgent.`;
+      if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
+      return;
+    }
+    if(r.status === 404){
+      // Function not deployed yet — fall back to direct Supabase insert.
+      // (Honeypot + client rate-limit already checked above.)
+      const fb = await fetch(SURL+'/rest/v1/ncr_records',{
+        method:'POST',
+        headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify(rec)
+      });
+      if(!fb.ok){
+        err.textContent='⚠️ Submission failed — please try again or call us directly';
+        if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
+        return;
+      }
+    } else if(!r.ok){
       err.textContent='⚠️ Submission failed — please try again or call us directly';
       if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
-      console.error(t);
+      console.error(await r.text());
       return;
     }
   }catch(e){
@@ -5832,6 +5977,30 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 function fmtDate(d){if(!d||d==='None')return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}catch{return d;}}
 function statusCls(s){return s==='open'?'b-open':s==='closed'?'b-closed':'b-progress';}
 function statusBadge(s){const labels={open:'Open',closed:'Closed',inprogress:'In Progress'};return`<span class="badge ${statusCls(s)}">${labels[s]||s||'Open'}</span>`;}
+
+// Tiny visual indicator for severity. Designed to sit inline before issue text without taking a column.
+function severityDot(sev){
+  if(!sev) return '';
+  const map = {
+    'Minor':    {color:'#22c55e', title:'Minor — cosmetic / non-functional'},
+    'Major':    {color:'#f59e0b', title:'Major — affects fit / function but not safety'},
+    'Critical': {color:'#ef4444', title:'Critical — must be remade or rejected'},
+    'Safety':   {color:'#9333ea', title:'Safety — fire rating / structural / regulatory'}
+  };
+  const m = map[sev]; if(!m) return '';
+  return `<span title="${m.title}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${m.color};margin-right:6px;vertical-align:middle"></span>`;
+}
+function severityBadge(sev){
+  if(!sev) return '';
+  const map={
+    'Minor':    {bg:'rgba(34,197,94,.15)',  fg:'#22c55e', icon:'🟢'},
+    'Major':    {bg:'rgba(245,158,11,.15)', fg:'#f59e0b', icon:'🟠'},
+    'Critical': {bg:'rgba(239,68,68,.15)',  fg:'#ef4444', icon:'🔴'},
+    'Safety':   {bg:'rgba(147,51,234,.15)', fg:'#9333ea', icon:'⚠️'}
+  };
+  const m=map[sev]; if(!m) return `<span class="badge">${esc(sev)}</span>`;
+  return `<span class="badge" style="background:${m.bg};color:${m.fg}">${m.icon} ${sev}</span>`;
+}
 function openModal(id){document.getElementById(id).classList.remove('hidden');}
 function closeModal(id){document.getElementById(id).classList.add('hidden');}
 function closeRaiseModal(){closeModal('raiseModal');}
@@ -7404,10 +7573,16 @@ function openEditNcr(id){
   document.getElementById('editIssue').value = r.issue||'';
   document.getElementById('editRootCause').value = r.root_cause||'';
   document.getElementById('editCorrective').value = r.corrective||'';
+  document.getElementById('editPreventive').value = r.preventive_action||'';
+  document.getElementById('editEffDue').value = r.effectiveness_review_due||'';
+  document.getElementById('editEffDate').value = r.effectiveness_review_date||'';
+  document.getElementById('editEffOutcome').value = r.effectiveness_review_outcome||'';
+  document.getElementById('editEffNotes').value = r.effectiveness_review_notes||'';
   document.getElementById('editCategory').value = r.category||'';
   document.getElementById('editDept').value = r.dept||'';
   document.getElementById('editNcrType').value = r.ncr_type||'Door';
   document.getElementById('editErrorType').value = r.error_type||'';
+  document.getElementById('editSeverity').value = r.severity||'';
   document.getElementById('editDoorRef').value = r.door_ref||'';
   document.getElementById('editDoorType').value = r.door_type||'';
   document.getElementById('editUnits').value = r.units||'';
@@ -7431,10 +7606,17 @@ async function saveNcrEdit(){
     issue:        document.getElementById('editIssue').value.trim(),
     root_cause:   document.getElementById('editRootCause').value.trim(),
     corrective:   document.getElementById('editCorrective').value.trim(),
+    preventive_action: document.getElementById('editPreventive').value.trim(),
+    effectiveness_review_due:  document.getElementById('editEffDue').value||null,
+    effectiveness_review_date: document.getElementById('editEffDate').value||null,
+    effectiveness_review_outcome: document.getElementById('editEffOutcome').value||null,
+    effectiveness_review_notes: document.getElementById('editEffNotes').value.trim(),
+    effectiveness_review_by: document.getElementById('editEffOutcome').value ? (currentUser?.name||null) : null,
     category:     document.getElementById('editCategory').value.trim(),
     dept:         document.getElementById('editDept').value.trim(),
     ncr_type:     document.getElementById('editNcrType').value||'Door',
     error_type:   document.getElementById('editErrorType').value||null,
+    severity:     document.getElementById('editSeverity').value||null,
     door_ref:     document.getElementById('editDoorRef').value.trim(),
     door_type:    document.getElementById('editDoorType').value.trim(),
     units:        parseFloat(document.getElementById('editUnits').value)||0,
