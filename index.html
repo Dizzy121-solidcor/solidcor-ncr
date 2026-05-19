@@ -237,6 +237,20 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div class="alc-err" id="setupErr"></div>
       <button class="alc-btn" onclick="doSetupAdmin()">Create SuperAdmin account →</button>
     </div>
+
+    <!-- Forced password change (after legacy login or admin reset) -->
+    <div id="loginForcedChangePanel" style="display:none">
+      <h2 style="font-size:20px;font-weight:600;margin-bottom:6px">Set a new password</h2>
+      <p id="forcedChangeReason" style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5">For security, you must set a new password before continuing.</p>
+      <div class="alc-field"><label>New password</label>
+        <input type="password" id="forcedNewPass" placeholder="Min 8 characters" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')document.getElementById('forcedConfirmPass').focus()"></div>
+      <div class="alc-field"><label>Confirm new password</label>
+        <input type="password" id="forcedConfirmPass" placeholder="Repeat new password" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')submitForcedPasswordChange()"></div>
+      <div class="alc-err" id="forcedChangeErr"></div>
+      <button class="alc-btn" onclick="submitForcedPasswordChange()" id="forcedChangeBtn">Update password &amp; continue →</button>
+    </div>
   </div>
 </div>
 
@@ -872,8 +886,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
               <input type="text" id="uEmail" placeholder="jane@solidcor.co.uk"></div>
           </div>
           <div class="form-cols">
-            <div class="form-row"><label>PIN * <span style="color:var(--muted);font-weight:400;font-size:11px">(4–6 digits)</span></label>
-              <input type="password" id="uPin" placeholder="e.g. 1234" maxlength="10"></div>
+            <div class="form-row"><label>Password * <span style="color:var(--muted);font-weight:400;font-size:11px">(min 6 characters)</span></label>
+              <input type="password" id="uPin" placeholder="Min 6 characters" maxlength="100"></div>
             <div class="form-row"><label>Role</label>
               <select id="uRole" onchange="renderPermissionToggles()">
                 <option value="admin">Admin</option>
@@ -895,20 +909,20 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
 
-      <!-- Change own PIN modal -->
+      <!-- Change own password modal -->
       <div class="modal-overlay hidden" id="changePinModal">
         <div class="modal" style="width:min(360px,95vw)">
-          <h3>🔑 Change PIN</h3>
-          <div class="form-row"><label>Current PIN</label>
-            <input type="password" id="cpCurrent" placeholder="Enter current PIN" maxlength="10"></div>
-          <div class="form-row"><label>New PIN</label>
-            <input type="password" id="cpNew" placeholder="4–6 digits" maxlength="10"></div>
-          <div class="form-row"><label>Confirm new PIN</label>
-            <input type="password" id="cpConfirm" placeholder="Repeat new PIN" maxlength="10"></div>
+          <h3>🔑 Change password</h3>
+          <div class="form-row"><label>Current password</label>
+            <input type="password" id="cpCurrent" placeholder="Enter current password" maxlength="100"></div>
+          <div class="form-row"><label>New password</label>
+            <input type="password" id="cpNew" placeholder="Min 6 characters" maxlength="100"></div>
+          <div class="form-row"><label>Confirm new password</label>
+            <input type="password" id="cpConfirm" placeholder="Repeat new password" maxlength="100"></div>
           <div id="cpErr" style="font-size:12px;color:var(--red);font-family:var(--mono);margin-top:4px;min-height:16px"></div>
           <div class="modal-actions">
             <button class="ghost" onclick="closeModal('changePinModal')">Cancel</button>
-            <button class="primary" onclick="savePinChange()">Update PIN</button>
+            <button class="primary" onclick="savePinChange()">Update password</button>
           </div>
         </div>
       </div>
@@ -1004,12 +1018,10 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           </div>
         </div>
 
-        <!-- API Key -->
+        <!-- API Key (moved server-side) -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🤖 Anthropic API key</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Used for door sheet scanning. Get your key at console.anthropic.com</div>
-          <input type="password" id="ejs_anthropic_key" placeholder="sk-ant-api03-…"
-            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:12px;box-sizing:border-box">
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);line-height:1.5">For security, the API key is now held server-side as the <code style="color:var(--accent)">ANTHROPIC_API_KEY</code> environment variable on the Netlify function. Set or rotate it in Netlify → Site settings → Environment variables. The key is never sent to the browser.</div>
         </div>
 
         <!-- Email routing -->
@@ -1060,7 +1072,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div style="display:flex;gap:8px">
           <button class="top-btn primary" onclick="saveSettings()">💾 Save settings</button>
           <button class="top-btn ghost" onclick="sendTestEmail()">📧 Send test email</button>
-          <button class="top-btn ghost" id="btnChangePinSettings" style="display:none" onclick="openModal('changePinModal')">🔑 Change my PIN</button>
+          <button class="top-btn ghost" id="btnChangePinSettings" style="display:none" onclick="openModal('changePinModal')">🔑 Change my password</button>
         </div>
         <div id="settingsStatus" style="margin-top:10px;font-size:12px;font-family:var(--mono);color:var(--green)"></div>
 
@@ -1678,6 +1690,67 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
+// ─── Password hashing (PBKDF2-SHA256, salted) ─────────────────────────
+// Migration from legacy unsalted SHA-256. Existing rows have
+// password_algo='sha256' (or null) and no salt. On successful login with
+// the legacy algo, the user is forced to set a new password which is
+// stored with algo='pbkdf2-sha256' + a fresh random salt.
+const PBKDF2_ITERATIONS = 100000;
+
+function randomSalt(){
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function hashPasswordPBKDF2(password, salt, iterations){
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name:'PBKDF2', salt: enc.encode(salt), iterations: iterations||PBKDF2_ITERATIONS, hash:'SHA-256' },
+    key, 256
+  );
+  return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// Constant-time hex string compare. Both args are hex of identical
+// length in normal use; we still defend against length mismatch.
+function constantTimeHexEq(a, b){
+  if(typeof a!=='string'||typeof b!=='string') return false;
+  if(a.length!==b.length) return false;
+  let diff = 0;
+  for(let i=0;i<a.length;i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Verify a plaintext password against a user record from ncr_admin_users.
+// Returns { ok:boolean, legacy:boolean }.  legacy=true means the password
+// was correct but stored with the old SHA-256 scheme and must be migrated.
+async function verifyUserPassword(user, plaintext){
+  if(!user || !plaintext) return { ok:false, legacy:false };
+  const algo = user.password_algo || 'sha256';
+  if(algo === 'pbkdf2-sha256' && user.password_salt){
+    const h = await hashPasswordPBKDF2(plaintext, user.password_salt);
+    return { ok: constantTimeHexEq(h, user.password_hash||''), legacy:false };
+  }
+  // Legacy: unsalted SHA-256
+  const h = await sha256(plaintext);
+  return { ok: constantTimeHexEq(h, user.password_hash||''), legacy:true };
+}
+
+// Produce the fields needed to store a password with the new scheme.
+async function buildNewPasswordFields(plaintext){
+  const salt = randomSalt();
+  const hash = await hashPasswordPBKDF2(plaintext, salt);
+  return {
+    password_hash: hash,
+    password_salt: salt,
+    password_algo: 'pbkdf2-sha256',
+    password_changed_at: new Date().toISOString(),
+    must_change_password: false
+  };
+}
+
 const NCR_SESSION_KEY='ncr_admin_session';
 
 function saveSession(user){
@@ -1700,6 +1773,12 @@ async function checkAuthOnLoad(){
   const sess=loadSession();
   if(sess){
     currentUser=sess;
+    // If the session was saved mid-migration, force the change before
+    // they get to use the app.
+    if(sess.mustChangePassword){
+      showForcedPasswordChange(true);
+      return;
+    }
     document.getElementById('loginGate').classList.add('hidden');
     finishLogin(true);
     return;
@@ -1724,9 +1803,10 @@ async function doAdminLogin(){
   err.textContent='';btn.disabled=true;btn.textContent='Signing in…';
 
   try{
-    const hash=await sha256(pass);
+    // Fetch the user record by email only. Password verification happens
+    // locally so we can read the per-user salt + algo first.
     const results=await sbGet('ncr_admin_users',
-      `email=eq.${encodeURIComponent(email)}&password_hash=eq.${hash}&active=eq.true`
+      `email=eq.${encodeURIComponent(email)}&active=eq.true&limit=1`
     ).catch(()=>[]);
 
     if(!results.length){
@@ -1737,14 +1817,35 @@ async function doAdminLogin(){
     }
 
     const user=results[0];
+    const { ok, legacy } = await verifyUserPassword(user, pass);
+    if(!ok){
+      err.textContent='⚠️ Incorrect email or password';
+      btn.disabled=false;btn.textContent='Sign in →';
+      document.getElementById('adminPass').value='';
+      return;
+    }
+
     const perms=user.role==='superadmin'?SUPERADMIN_PERMS:(user.permissions||{});
-    currentUser={id:user.id,name:user.name,email:user.email,shift:'Admin',role:user.role,permissions:perms,isAdmin:true};
+    const mustChange = !!user.must_change_password || legacy;
+    currentUser={
+      id:user.id, name:user.name, email:user.email, shift:'Admin',
+      role:user.role, permissions:perms, isAdmin:true,
+      mustChangePassword: mustChange
+    };
     saveSession(currentUser);
 
     sbPatch('ncr_admin_users',user.id,{last_login:new Date().toISOString()}).catch(()=>{});
 
-    document.getElementById('loginGate').classList.add('hidden');
     document.getElementById('adminPass').value='';
+
+    if(mustChange){
+      // Don't drop the login gate yet — show the forced-change modal on top.
+      // finishLogin runs after a successful password change.
+      showForcedPasswordChange(legacy);
+      return;
+    }
+
+    document.getElementById('loginGate').classList.add('hidden');
     finishLogin(false);
 
   }catch(e){
@@ -1761,11 +1862,12 @@ async function doSetupAdmin(){
   if(!name||!email||!pass){err.textContent='⚠️ All fields required';return;}
   if(pass.length<6){err.textContent='⚠️ Password must be at least 6 characters';return;}
   try{
-    const hash=await sha256(pass);
+    const pwd=await buildNewPasswordFields(pass);
     await sbUps('ncr_admin_users',{
       id:'superadmin_'+Date.now(),name,email,
-      password_hash:hash,role:'superadmin',
-      permissions:SUPERADMIN_PERMS,active:true
+      role:'superadmin',
+      permissions:SUPERADMIN_PERMS,active:true,
+      ...pwd
     });
     document.getElementById('setupErr').textContent='';
     document.getElementById('setupName').value='';
@@ -1788,6 +1890,55 @@ function doLogout(){
   document.getElementById('adminLoginErr').textContent='';
   document.getElementById('adminLoginBtn').disabled=false;
   document.getElementById('adminLoginBtn').textContent='Sign in →';
+}
+
+// ─── Forced password change after legacy login or admin reset ────────
+function showForcedPasswordChange(isLegacy){
+  document.getElementById('loginAdminPanel').style.display='none';
+  document.getElementById('loginSetupPanel').style.display='none';
+  document.getElementById('loginForcedChangePanel').style.display='block';
+  document.getElementById('loginGate').classList.remove('hidden');
+  document.getElementById('forcedChangeReason').textContent = isLegacy
+    ? 'Your password was stored using an older hashing scheme. Please set a new password — your old one will stop working after this.'
+    : 'An administrator set a temporary password for you. Choose a new one before continuing.';
+  document.getElementById('forcedNewPass').value='';
+  document.getElementById('forcedConfirmPass').value='';
+  document.getElementById('forcedChangeErr').textContent='';
+  setTimeout(()=>document.getElementById('forcedNewPass').focus(), 50);
+}
+
+async function submitForcedPasswordChange(){
+  const err=document.getElementById('forcedChangeErr');
+  const btn=document.getElementById('forcedChangeBtn');
+  const newPass=document.getElementById('forcedNewPass').value;
+  const confirmPass=document.getElementById('forcedConfirmPass').value;
+  if(!newPass||!confirmPass){err.textContent='⚠️ Both fields are required';return;}
+  if(newPass!==confirmPass){err.textContent='⚠️ Passwords do not match';return;}
+  if(newPass.length<8){err.textContent='⚠️ Password must be at least 8 characters';return;}
+  if(!currentUser||!currentUser.id){err.textContent='⚠️ Session error — please sign in again';return;}
+
+  err.textContent='';btn.disabled=true;btn.textContent='Updating…';
+  try{
+    const pwd=await buildNewPasswordFields(newPass);
+    await sbPatch('ncr_admin_users', currentUser.id, pwd);
+
+    // Clear the must-change flag on the in-memory session
+    currentUser.mustChangePassword=false;
+    saveSession(currentUser);
+
+    // Tidy and complete login
+    document.getElementById('forcedNewPass').value='';
+    document.getElementById('forcedConfirmPass').value='';
+    document.getElementById('loginForcedChangePanel').style.display='none';
+    document.getElementById('loginAdminPanel').style.display='block';
+    document.getElementById('loginGate').classList.add('hidden');
+    btn.disabled=false;btn.textContent='Update password & continue →';
+    showToast('✓ Password updated');
+    finishLogin(false);
+  }catch(e){
+    err.textContent='⚠️ Update failed: '+(e.message||'unknown error');
+    btn.disabled=false;btn.textContent='Update password & continue →';
+  }
 }
 
 // Operator QR code
@@ -1825,7 +1976,13 @@ async function saveUser(){
   const permissions={};
   document.querySelectorAll('#uPermToggles input[type=checkbox]').forEach(cb=>{permissions[cb.dataset.key]=cb.checked;});
   const obj={id,name,email,role,permissions,active:true};
-  if(pass) obj.password_hash=await sha256(pass);
+  if(pass){
+    const pwd=await buildNewPasswordFields(pass);
+    Object.assign(obj, pwd);
+    // For NEW users created by an admin, force change on first login —
+    // standard 'temp password' pattern. Admin-resets also force change.
+    obj.must_change_password = true;
+  }
   try{
     await sbUps('ncr_admin_users',obj);
     closeModal('userModal');
@@ -1843,10 +2000,16 @@ async function savePinChange(){
   if(!current||!newPass||!confirm_){err.textContent='⚠️ All fields required';return;}
   if(newPass!==confirm_){err.textContent='⚠️ Passwords do not match';return;}
   if(newPass.length<6){err.textContent='⚠️ Password must be at least 6 characters';return;}
-  const currentHash=await sha256(current);
-  const users=await sbGet('ncr_admin_users',`id=eq.${currentUser.id}&password_hash=eq.${currentHash}`).catch(()=>[]);
-  if(!users.length){err.textContent='⚠️ Current password is incorrect';return;}
-  await sbPatch('ncr_admin_users',currentUser.id,{password_hash:await sha256(newPass)});
+  if(newPass===current){err.textContent='⚠️ New password must differ from current';return;}
+
+  // Fetch user record (need salt/algo to verify current password)
+  const users=await sbGet('ncr_admin_users',`id=eq.${encodeURIComponent(currentUser.id)}&limit=1`).catch(()=>[]);
+  if(!users.length){err.textContent='⚠️ Account not found';return;}
+  const { ok } = await verifyUserPassword(users[0], current);
+  if(!ok){err.textContent='⚠️ Current password is incorrect';return;}
+
+  const pwd=await buildNewPasswordFields(newPass);
+  await sbPatch('ncr_admin_users', currentUser.id, pwd);
   closeModal('changePinModal');
   ['cpCurrent','cpNew','cpConfirm'].forEach(id=>document.getElementById(id).value='');
   showToast('✓ Password updated');
@@ -1905,23 +2068,7 @@ function applyPermissions(){
 }
 
 // Update user modal label from PIN to Password
-document.addEventListener('DOMContentLoaded',()=>{
-  const pinLabel=document.querySelector('label[for="uPin"]');
-  // label is inline so find by content proximity to uPin
-  const uPinInput=document.getElementById('uPin');
-  if(uPinInput){
-    uPinInput.placeholder='Min 6 characters';
-    uPinInput.maxLength=100;
-    const lbl=uPinInput.previousElementSibling;
-    if(lbl&&lbl.tagName==='LABEL') lbl.textContent='Password'+(uPinInput.closest('.form-row')?'':'');
-  }
-  const cpCurrentLbl=document.querySelector('label[for="cpCurrent"]');
-  if(cpCurrentLbl) cpCurrentLbl.textContent='Current password';
-  const cpNewLbl=document.querySelector('label[for="cpNew"]');
-  if(cpNewLbl) cpNewLbl.textContent='New password';
-  const cpConfirmLbl=document.querySelector('label[for="cpConfirm"]');
-  if(cpConfirmLbl) cpConfirmLbl.textContent='Confirm new password';
-});
+// (HTML labels are now correct directly — no runtime override needed.)
 
 // ═══════════════════════════════════════════════════════════════
 // USER MANAGEMENT
@@ -2833,6 +2980,27 @@ async function saveDoorSheetImage(ncrId, dataUrl){
   await sbUps('ncr_images', img).catch(()=>{});
 }
 
+// Persist an array of user-uploaded photos (from ncrPhotos buffer or public portal) against an NCR.
+async function saveNcrPhotos(ncrId, photos, raisedBy){
+  if(!ncrId || !photos || !photos.length) return;
+  // Sequential, not parallel — Supabase upserts can deadlock when hammered.
+  for(let i=0;i<photos.length;i++){
+    const p = photos[i];
+    const data = p.data || p.dataUrl || p; // accept several shapes
+    if(!data) continue;
+    const img = {
+      id: 'img_'+Date.now()+'_'+i,
+      ncr_id: ncrId,
+      image_data: data,
+      image_type: 'photo',
+      file_name: p.name || ('photo_'+(i+1)+'.jpg'),
+      created_at: new Date().toISOString(),
+      created_by: raisedBy || currentUser?.name || 'Public portal'
+    };
+    await sbUps('ncr_images', img).catch(e=>console.warn('Photo save failed:', e.message));
+  }
+}
+
 async function loadNcrImages(ncrId){
   try{
     return await sbGet('ncr_images', `ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.desc`);
@@ -3142,18 +3310,8 @@ function renderNcrPhotoGrid(){
 
 async function scanDoorSheet(input){
   const file=input.files[0]; if(!file)return;
-
-  // Get API key from settings
-  const s=loadSettings();
-  const BAKED_KEY='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';
-  let apiKey=s.anthropic_key||BAKED_KEY;
-  if(!apiKey){
-    apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
-    if(!apiKey){input.value='';return;}
-    const cfg={...s,anthropic_key:apiKey.trim()};
-    localStorage.setItem(SETTINGS_KEY,JSON.stringify(cfg));
-    apiKey=apiKey.trim();
-  }
+  // API key is held server-side in ANTHROPIC_API_KEY env var on the Netlify function.
+  // The client must never see or send the key.
 
   document.getElementById('scanStatus').textContent='🤖 Reading door sheet…';
   const reader=new FileReader();
@@ -3279,6 +3437,12 @@ function submitNCR(){
   if(window._pendingDoorSheetImage){
     saveDoorSheetImage(id, window._pendingDoorSheetImage);
     window._pendingDoorSheetImage=null;
+  }
+
+  // Persist any photos the user attached via "+ Add photos"
+  if(ncrPhotos && ncrPhotos.length){
+    const photosToSave = ncrPhotos.slice(); // snapshot before we clear
+    saveNcrPhotos(id, photosToSave, raisedBy);
   }
 
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
@@ -4359,6 +4523,26 @@ function showExtNcrPortal(){
           <textarea id="ep_fault" rows="4" placeholder="Please describe the fault in as much detail as possible…"
             style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea></div>
 
+        <!-- Photos -->
+        <div>
+          <label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Photos <span style="color:#7a7e8a;font-weight:400;text-transform:none">(optional — adds JPG/PNG, up to 10MB each)</span></label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <label style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:13px;cursor:pointer">
+              📷 Take photo
+              <input type="file" id="ep_photo_camera" accept="image/*" capture="environment" style="display:none" onchange="epAddPhotos(this)">
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:13px;cursor:pointer">
+              📁 Upload images
+              <input type="file" id="ep_photo_upload" accept="image/*" multiple style="display:none" onchange="epAddPhotos(this)">
+            </label>
+          </div>
+          <div id="ep_photo_grid" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+
+        <!-- Honeypot: real users do not see this; bots fill every field -->
+        <input id="ep_website" name="website" type="text" tabindex="-1" autocomplete="off"
+          style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+
         <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Email address <span style="color:#7a7e8a;font-weight:400;text-transform:none">(for updates)</span></label>
           <input id="ep_email" type="email" autocomplete="email" placeholder="your@email.com"
             style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
@@ -4384,6 +4568,45 @@ function showExtNcrPortal(){
   if(_savedExtName && document.getElementById('ep_name')){
     document.getElementById('ep_name').value = _savedExtName;
   }
+
+  // Reset photo state when the portal opens
+  window._extPortalPhotos = [];
+}
+
+// Public portal photo buffer + handler
+function epAddPhotos(input){
+  const files = [...(input.files||[])];
+  window._extPortalPhotos = window._extPortalPhotos || [];
+  files.forEach(file=>{
+    // Skip anything too large (>10MB raw) to protect against accidental video uploads
+    if(file.size > 10*1024*1024){
+      const errEl=document.getElementById('ep_err');
+      if(errEl) errEl.textContent='⚠️ "'+file.name+'" is over 10MB — please choose a smaller file';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async e => {
+      // Compress to keep DB rows manageable and uploads fast on slow site wifi
+      let data = e.target.result;
+      try { data = await compressImage(data, 1400, 0.8); } catch(_){}
+      window._extPortalPhotos.push({name:file.name, data});
+      epRenderPhotoGrid();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function epRenderPhotoGrid(){
+  const grid = document.getElementById('ep_photo_grid');
+  if(!grid) return;
+  const photos = window._extPortalPhotos || [];
+  grid.innerHTML = photos.map((p,i)=>`
+    <div style="position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;border:1px solid #2a2e38">
+      <img src="${p.data}" style="width:100%;height:100%;object-fit:cover" alt="">
+      <button onclick="window._extPortalPhotos.splice(${i},1);epRenderPhotoGrid()"
+        style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;padding:0">×</button>
+    </div>`).join('');
 }
 
 function epTypeChange(){
@@ -4397,6 +4620,29 @@ function epTypeChange(){
 
 async function submitExtNcrPortal(){
   const err = document.getElementById('ep_err');
+
+  // Honeypot — real users never see the #ep_website input.
+  // Bots that auto-fill every field do, so a value here means it's spam.
+  const hp = document.getElementById('ep_website');
+  if(hp && hp.value){
+    err.textContent='⚠️ Submission blocked.';
+    return;
+  }
+
+  // Soft rate-limit per browser — stops accidental double-submits and casual abuse.
+  // Server-side rate limiting should still be added in a Netlify edge function.
+  try{
+    const RL_KEY='ncr_portal_submits';
+    const now=Date.now();
+    const recent=JSON.parse(localStorage.getItem(RL_KEY)||'[]').filter(t=>now-t<60*60*1000);
+    if(recent.length>=5){
+      err.textContent='⚠️ Too many submissions in the last hour. If this is urgent please call us directly.';
+      return;
+    }
+    recent.push(now);
+    localStorage.setItem(RL_KEY, JSON.stringify(recent));
+  }catch(_){}
+
   const _rawCompP=document.getElementById('ep_company').value.trim();
   const _matchP=findClosestCustomer(_rawCompP);
   const company=(_matchP&&_matchP.score<0.25)?_matchP.match:titleCase(_rawCompP);
@@ -4463,6 +4709,14 @@ async function submitExtNcrPortal(){
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({type:'submission',ncr:rec,customer_email:rec.customer_email||null})
   }).catch(()=>{});
+
+  // Persist any photos the customer attached — fire and forget so they
+  // don't block the confirmation screen on slow connections.
+  if(window._extPortalPhotos && window._extPortalPhotos.length){
+    const photosToSave = window._extPortalPhotos.slice();
+    window._extPortalPhotos = [];
+    saveNcrPhotos(id, photosToSave, name).catch(()=>{});
+  }
   document.getElementById('extNcrPortalWrap').innerHTML=`
   <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px">
     <div style="background:#161920;border:1px solid #2a2e38;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:100%">
@@ -5621,7 +5875,6 @@ async function loadSettingsFromDB(){
 
 async function saveSettings(){
   const s={
-    anthropic_key:document.getElementById('ejs_anthropic_key').value.trim(),
     ejs_service:document.getElementById('ejs_service').value.trim(),
     ejs_template:document.getElementById('ejs_template').value.trim(),
     ejs_pubkey:document.getElementById('ejs_pubkey').value.trim(),
@@ -5660,7 +5913,7 @@ async function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','customer_report_cc','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
+  ['ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','customer_report_cc','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
