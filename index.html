@@ -942,7 +942,6 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           Edit the fields below with what the analysis <em>should</em> have said. Your version gets saved as the team-approved answer and used as guidance for future RCAs on similar NCRs.
         </div>
         <input type="hidden" id="rcaRefineNcrId">
-        <input type="hidden" id="rcaRefineAiData">
 
         <div class="form-row">
           <label>Root cause</label>
@@ -7948,6 +7947,14 @@ function renderRcaResult(r, ncrId){
   const outputEl = document.getElementById('rcaOutput');
   if(!outputEl) return;
 
+  // Stash on a global so the action buttons don't have to round-trip
+  // the full JSON through their onclick attributes. encodeURIComponent
+  // preserves apostrophes which would terminate a single-quoted onclick
+  // argument early — that bug broke every button when the AI's text
+  // contained any apostrophe.
+  window._lastRcaResult = r;
+  window._lastRcaNcrId  = ncrId;
+
   let html = '';
 
   if(_rcaMethod==='5whys' && r.whys){
@@ -8016,7 +8023,7 @@ function renderRcaResult(r, ncrId){
   // Save + accept buttons
   html += `
     <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="top-btn primary" style="flex:1;justify-content:center" onclick="saveRcaToNcr('${ncrId}','${encodeURIComponent(JSON.stringify(r))}')">
+      <button class="top-btn primary" style="flex:1;justify-content:center" onclick="saveRcaToNcr()">
         💾 Save root cause to NCR
       </button>
       <button class="top-btn ghost" onclick="document.getElementById('rcaOutput').innerHTML=''">Clear</button>
@@ -8027,13 +8034,13 @@ function renderRcaResult(r, ncrId){
       <div style="font-size:10px;font-family:var(--mono);color:#a78bfa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🧠 Help the AI learn from this</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px">Your feedback teaches the AI to give better RCAs for similar future NCRs. Past approved and corrected findings get included as examples in future prompts.</div>
       <div id="rcaFeedbackButtons" style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(34,197,94,.5);color:#4ade80" onclick="submitRcaFeedback('${ncrId}','approved','${encodeURIComponent(JSON.stringify(r))}')">
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(34,197,94,.5);color:#4ade80" onclick="submitRcaFeedback('approved')">
           👍 Looks right
         </button>
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(245,158,11,.5);color:#fbbf24" onclick="openRcaRefine('${ncrId}','${encodeURIComponent(JSON.stringify(r))}')">
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(245,158,11,.5);color:#fbbf24" onclick="openRcaRefine()">
           ✏️ Refine
         </button>
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(239,68,68,.4);color:#f87171" onclick="submitRcaFeedback('${ncrId}','rejected','${encodeURIComponent(JSON.stringify(r))}')">
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(239,68,68,.4);color:#f87171" onclick="submitRcaFeedback('rejected')">
           👎 Off the mark
         </button>
       </div>
@@ -8047,11 +8054,12 @@ function renderRcaResult(r, ncrId){
 // Store team feedback on each AI-generated RCA so future analyses can
 // use approved / corrected examples as in-prompt guidance.
 
-async function submitRcaFeedback(ncrId, verdict, encodedAiData){
+async function submitRcaFeedback(verdict){
+  const ncrId  = window._lastRcaNcrId;
+  const aiData = window._lastRcaResult || {};
+  if(!ncrId){ showToast('⚠️ Run an RCA first'); return; }
   const ncr = ncrRecords.find(r=>r.id===ncrId);
   if(!ncr){ showToast('⚠️ NCR not found'); return; }
-  let aiData = {};
-  try { aiData = JSON.parse(decodeURIComponent(encodedAiData)); } catch(_){}
 
   const statusEl = document.getElementById('rcaFeedbackStatus');
   const btnWrap  = document.getElementById('rcaFeedbackButtons');
@@ -8094,11 +8102,11 @@ async function submitRcaFeedback(ncrId, verdict, encodedAiData){
   }
 }
 
-function openRcaRefine(ncrId, encodedAiData){
-  let aiData = {};
-  try { aiData = JSON.parse(decodeURIComponent(encodedAiData)); } catch(_){}
+function openRcaRefine(){
+  const aiData = window._lastRcaResult || {};
+  const ncrId  = window._lastRcaNcrId;
+  if(!ncrId){ showToast('⚠️ Run an RCA first'); return; }
   document.getElementById('rcaRefineNcrId').value = ncrId;
-  document.getElementById('rcaRefineAiData').value = encodedAiData;
   // Pre-fill with the AI's suggestion so users edit rather than retype
   document.getElementById('rcaRefineRoot').value = aiData.root_cause || '';
   document.getElementById('rcaRefineCorrective').value = aiData.corrective_action || '';
@@ -8121,8 +8129,7 @@ async function saveRcaRefinement(){
   const ncr = ncrRecords.find(r=>r.id===ncrId);
   if(!ncr){ errEl.textContent='⚠️ NCR not found'; return; }
 
-  let aiData = {};
-  try { aiData = JSON.parse(decodeURIComponent(document.getElementById('rcaRefineAiData').value)); } catch(_){}
+  const aiData = window._lastRcaResult || {};
 
   const row = {
     id: 'rcafb_'+Date.now(),
@@ -8203,8 +8210,10 @@ async function applyRcaErrorType(ncrId, errorType){
   openDetail(ncrId);
 }
 
-async function saveRcaToNcr(ncrId, encodedResult){
-  const r = JSON.parse(decodeURIComponent(encodedResult));
+async function saveRcaToNcr(){
+  const ncrId = window._lastRcaNcrId;
+  const r = window._lastRcaResult;
+  if(!ncrId || !r){ showToast('⚠️ Run an RCA first'); return; }
   const ncr = ncrRecords.find(x=>x.id===ncrId);
   if(!ncr) return;
 
