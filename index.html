@@ -934,6 +934,44 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       </div>
     </div>
 
+    <!-- RCA Refine modal — teach the AI by correcting its analysis -->
+    <div class="modal-overlay hidden" id="rcaRefineModal">
+      <div class="modal" style="width:min(640px,95vw);max-height:90vh;overflow-y:auto">
+        <h3>✏️ Refine this analysis</h3>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;padding:10px;background:rgba(139,92,246,.06);border-radius:var(--r);border-left:2px solid #a78bfa">
+          Edit the fields below with what the analysis <em>should</em> have said. Your version gets saved as the team-approved answer and used as guidance for future RCAs on similar NCRs.
+        </div>
+        <input type="hidden" id="rcaRefineNcrId">
+        <input type="hidden" id="rcaRefineAiData">
+
+        <div class="form-row">
+          <label>Root cause</label>
+          <textarea id="rcaRefineRoot" rows="2" placeholder="What's the actual root cause?"
+            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+        </div>
+        <div class="form-row">
+          <label>Corrective action <span style="color:var(--muted);font-weight:400;font-size:11px">(fix this specific issue)</span></label>
+          <textarea id="rcaRefineCorrective" rows="2"
+            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+        </div>
+        <div class="form-row">
+          <label>Preventive action <span style="color:var(--muted);font-weight:400;font-size:11px">(stop recurrence)</span></label>
+          <textarea id="rcaRefinePreventive" rows="2"
+            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+        </div>
+        <div class="form-row">
+          <label>Notes for future AI training <span style="color:var(--muted);font-weight:400;font-size:11px">(optional — what did the AI miss?)</span></label>
+          <textarea id="rcaRefineNotes" rows="2" placeholder="e.g. The AI missed that this machine has a known clutch issue; whenever you see this fault pattern check station 3 first"
+            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+        </div>
+        <div id="rcaRefineErr" style="font-size:12px;color:var(--red);font-family:var(--mono);margin-top:4px;min-height:16px"></div>
+        <div class="modal-actions">
+          <button class="ghost" onclick="closeModal('rcaRefineModal')">Cancel</button>
+          <button class="primary" onclick="saveRcaRefinement()">Save & teach the AI</button>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="view" id="view-settings">
       <div style="max-width:600px">
@@ -7857,6 +7895,20 @@ async function runRCA(ncrId, autoRun=false){
     r.date && r.date >= new Date(Date.now()-90*86400000).toISOString().slice(0,10)
   ).slice(0,5).map(r=>({date:r.date,issue:r.issue}));
 
+  // Fetch past team-approved or corrected RCAs for similar NCRs — these get
+  // injected as few-shot examples so the AI learns your team's style.
+  const examples = (await fetchRcaExamples(ncr).catch(()=>[])).map(e=>({
+    issue: e.ncr_issue,
+    category: e.ncr_category,
+    dept: e.ncr_dept,
+    verdict: e.verdict,
+    // For corrected examples, prefer the team's version. For approved, use the AI's.
+    root_cause: e.verdict==='corrected' ? (e.team_root_cause||e.ai_root_cause) : e.ai_root_cause,
+    corrective_action: e.verdict==='corrected' ? (e.team_corrective_action||e.ai_corrective_action) : e.ai_corrective_action,
+    preventive_action: e.verdict==='corrected' ? (e.team_preventive_action||e.ai_preventive_action) : e.ai_preventive_action,
+    team_notes: e.team_notes||null
+  }));
+
   // Load comments to include in analysis context
   const comments = await loadComments(ncrId).catch(()=>[]);
   const commentText = comments.length ? comments.map(c=>`${c.author}: ${c.text}`).join('\n') : null;
@@ -7873,7 +7925,8 @@ async function runRCA(ncrId, autoRun=false){
         },
         method: _rcaMethod,
         history: similar,
-        comments: commentText
+        comments: commentText,
+        examples
       })
     });
 
@@ -7967,9 +8020,177 @@ function renderRcaResult(r, ncrId){
         💾 Save root cause to NCR
       </button>
       <button class="top-btn ghost" onclick="document.getElementById('rcaOutput').innerHTML=''">Clear</button>
+    </div>
+
+    <!-- AI learning feedback — every approval/correction makes future RCAs better -->
+    <div style="margin-top:14px;padding:12px;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.25);border-radius:var(--r)">
+      <div style="font-size:10px;font-family:var(--mono);color:#a78bfa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🧠 Help the AI learn from this</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px">Your feedback teaches the AI to give better RCAs for similar future NCRs. Past approved and corrected findings get included as examples in future prompts.</div>
+      <div id="rcaFeedbackButtons" style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(34,197,94,.5);color:#4ade80" onclick="submitRcaFeedback('${ncrId}','approved','${encodeURIComponent(JSON.stringify(r))}')">
+          👍 Looks right
+        </button>
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(245,158,11,.5);color:#fbbf24" onclick="openRcaRefine('${ncrId}','${encodeURIComponent(JSON.stringify(r))}')">
+          ✏️ Refine
+        </button>
+        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(239,68,68,.4);color:#f87171" onclick="submitRcaFeedback('${ncrId}','rejected','${encodeURIComponent(JSON.stringify(r))}')">
+          👎 Off the mark
+        </button>
+      </div>
+      <div id="rcaFeedbackStatus" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-top:8px;min-height:14px"></div>
     </div>`;
 
   outputEl.innerHTML = html;
+}
+
+// ── RCA learning loop ──────────────────────────────────────────
+// Store team feedback on each AI-generated RCA so future analyses can
+// use approved / corrected examples as in-prompt guidance.
+
+async function submitRcaFeedback(ncrId, verdict, encodedAiData){
+  const ncr = ncrRecords.find(r=>r.id===ncrId);
+  if(!ncr){ showToast('⚠️ NCR not found'); return; }
+  let aiData = {};
+  try { aiData = JSON.parse(decodeURIComponent(encodedAiData)); } catch(_){}
+
+  const statusEl = document.getElementById('rcaFeedbackStatus');
+  const btnWrap  = document.getElementById('rcaFeedbackButtons');
+  if(btnWrap) btnWrap.style.opacity = '0.4';
+  if(statusEl) statusEl.textContent = '💾 Saving feedback…';
+
+  const row = {
+    id: 'rcafb_'+Date.now(),
+    ncr_id: ncrId,
+    method: _rcaMethod || '5whys',
+    ncr_category: ncr.category || null,
+    ncr_error_type: ncr.error_type || null,
+    ncr_dept: ncr.dept || null,
+    ncr_issue: ncr.issue || null,
+    ncr_door_type: ncr.door_type || null,
+    ai_root_cause: aiData.root_cause || null,
+    ai_corrective_action: aiData.corrective_action || null,
+    ai_preventive_action: aiData.preventive_action || null,
+    ai_full_output: aiData,
+    verdict,                       // 'approved' | 'rejected'
+    team_root_cause: null,
+    team_corrective_action: null,
+    team_preventive_action: null,
+    team_notes: null,
+    created_at: new Date().toISOString(),
+    created_by: currentUser?.name || currentUser?.email || 'Unknown'
+  };
+
+  try{
+    await sbUps('ncr_rca_feedback', row);
+    if(statusEl){
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = verdict==='approved'
+        ? '✓ Saved — future RCAs on similar NCRs will reference this one'
+        : '✓ Saved — AI will avoid this pattern next time';
+    }
+  }catch(e){
+    if(btnWrap) btnWrap.style.opacity = '';
+    if(statusEl){ statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Couldn\'t save feedback: '+e.message; }
+  }
+}
+
+function openRcaRefine(ncrId, encodedAiData){
+  let aiData = {};
+  try { aiData = JSON.parse(decodeURIComponent(encodedAiData)); } catch(_){}
+  document.getElementById('rcaRefineNcrId').value = ncrId;
+  document.getElementById('rcaRefineAiData').value = encodedAiData;
+  // Pre-fill with the AI's suggestion so users edit rather than retype
+  document.getElementById('rcaRefineRoot').value = aiData.root_cause || '';
+  document.getElementById('rcaRefineCorrective').value = aiData.corrective_action || '';
+  document.getElementById('rcaRefinePreventive').value = aiData.preventive_action || '';
+  document.getElementById('rcaRefineNotes').value = '';
+  document.getElementById('rcaRefineErr').textContent = '';
+  openModal('rcaRefineModal');
+}
+
+async function saveRcaRefinement(){
+  const ncrId = document.getElementById('rcaRefineNcrId').value;
+  const teamRoot       = document.getElementById('rcaRefineRoot').value.trim();
+  const teamCorrective = document.getElementById('rcaRefineCorrective').value.trim();
+  const teamPreventive = document.getElementById('rcaRefinePreventive').value.trim();
+  const teamNotes      = document.getElementById('rcaRefineNotes').value.trim();
+  const errEl = document.getElementById('rcaRefineErr');
+
+  if(!teamRoot){ errEl.textContent='⚠️ Root cause is required'; return; }
+
+  const ncr = ncrRecords.find(r=>r.id===ncrId);
+  if(!ncr){ errEl.textContent='⚠️ NCR not found'; return; }
+
+  let aiData = {};
+  try { aiData = JSON.parse(decodeURIComponent(document.getElementById('rcaRefineAiData').value)); } catch(_){}
+
+  const row = {
+    id: 'rcafb_'+Date.now(),
+    ncr_id: ncrId,
+    method: _rcaMethod || '5whys',
+    ncr_category: ncr.category || null,
+    ncr_error_type: ncr.error_type || null,
+    ncr_dept: ncr.dept || null,
+    ncr_issue: ncr.issue || null,
+    ncr_door_type: ncr.door_type || null,
+    ai_root_cause: aiData.root_cause || null,
+    ai_corrective_action: aiData.corrective_action || null,
+    ai_preventive_action: aiData.preventive_action || null,
+    ai_full_output: aiData,
+    verdict: 'corrected',
+    team_root_cause: teamRoot,
+    team_corrective_action: teamCorrective || null,
+    team_preventive_action: teamPreventive || null,
+    team_notes: teamNotes || null,
+    created_at: new Date().toISOString(),
+    created_by: currentUser?.name || currentUser?.email || 'Unknown'
+  };
+
+  try{
+    await sbUps('ncr_rca_feedback', row);
+    closeModal('rcaRefineModal');
+    const statusEl = document.getElementById('rcaFeedbackStatus');
+    const btnWrap  = document.getElementById('rcaFeedbackButtons');
+    if(btnWrap) btnWrap.style.opacity = '0.4';
+    if(statusEl){
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = '✓ Your refinement saved — the AI will use this as guidance for similar NCRs';
+    }
+    showToast('✓ Refinement saved — AI will learn from this');
+  }catch(e){
+    errEl.textContent='⚠️ Couldn\'t save: '+e.message;
+  }
+}
+
+// Fetch up to 5 relevant past feedback rows to use as few-shot examples in the
+// next RCA call. Similarity is judged by category, then error_type, then dept.
+// Only approved or corrected examples count — rejected ones are skipped.
+async function fetchRcaExamples(ncr){
+  const cat = ncr.category || '';
+  const errt = ncr.error_type || '';
+  const dept = ncr.dept || '';
+  // Try category first (highest signal), then fall back to broader filters
+  const queries = [
+    cat ? `ncr_category=eq.${encodeURIComponent(cat)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
+    errt ? `ncr_error_type=eq.${encodeURIComponent(errt)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
+    dept ? `ncr_dept=eq.${encodeURIComponent(dept)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
+  ].filter(Boolean);
+
+  const seen = new Set();
+  const out = [];
+  for(const q of queries){
+    if(out.length>=5) break;
+    try{
+      const rows = await sbGet('ncr_rca_feedback', q);
+      for(const r of (rows||[])){
+        if(seen.has(r.id)) continue;
+        seen.add(r.id);
+        out.push(r);
+        if(out.length>=5) break;
+      }
+    }catch(_){}
+  }
+  return out;
 }
 
 async function applyRcaErrorType(ncrId, errorType){
