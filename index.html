@@ -2940,15 +2940,28 @@ function openDetail(id){
     <div class="detail-card collapsible-card">
       <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
         <span>💬 Comments</span>
-        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▾</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <button onclick="event.stopPropagation();runCommentsDiagnostic('${id}')"
+            style="background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:9px;padding:3px 8px;cursor:pointer;letter-spacing:.05em"
+            title="Run a save/load test to find out why comments aren't persisting">🔧 Test</button>
+          <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▾</span>
+        </span>
       </h4>
       <div class="collapsible-body" style="display:block;margin-top:10px">
+        <pre id="commentsDiagOutput" style="display:none;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:10px;font-family:var(--mono);font-size:10px;color:var(--text);max-height:280px;overflow:auto;white-space:pre-wrap;margin:0 0 10px;line-height:1.45"></pre>
         <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
         <div style="display:flex;gap:8px">
           <input type="text" id="commentInput" placeholder="Add a comment or note…"
             onkeydown="if(event.key==='Enter')addComment('${id}')"
             style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
           <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
+        </div>
+        <div style="margin-top:10px;border-top:1px dashed var(--border2);padding-top:8px">
+          <button id="deletedCommentsToggle" data-open="0" onclick="toggleDeletedComments('${id}')"
+            style="display:none;align-items:center;gap:6px;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;padding:2px 0;text-transform:uppercase;letter-spacing:.07em">
+            🗑 Show <span data-count>0</span> deleted comment(s)
+          </button>
+          <div id="deletedCommentsPanel" style="display:none;margin-top:8px"></div>
         </div>
       </div>
     </div>
@@ -6870,15 +6883,150 @@ async function populateAssignedTo(){
 // NCR COMMENTS / THREAD
 // ═══════════════════════════════════════════════════════════════
 async function loadComments(ncrId){
-  // sbGet takes (tbl, query) separately. The query goes in the second arg —
-  // putting "table?query" all in the first arg makes sbGet build a URL with
-  // TWO ? marks, which Supabase rejects, so the catch() ate every load.
+  // Filter out soft-deleted rows. Restoration view uses loadDeletedComments.
   try{
-    return await sbGet('ncr_comments', `ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`);
+    return await sbGet('ncr_comments', `ncr_id=eq.${encodeURIComponent(ncrId)}&deleted_at=is.null&order=created_at.asc`);
   }catch(e){
     console.warn('loadComments failed:', e.message);
     return [];
   }
+}
+
+async function loadDeletedComments(ncrId){
+  // Recovery view — only used when user clicks 'Show N deleted'.
+  try{
+    return await sbGet('ncr_comments', `ncr_id=eq.${encodeURIComponent(ncrId)}&deleted_at=not.is.null&order=deleted_at.desc`);
+  }catch(e){
+    console.warn('loadDeletedComments failed:', e.message);
+    return [];
+  }
+}
+
+// Soft-delete a comment. The row stays in the database; a deleted_at
+// timestamp plus the user's name are written, and loadComments hides
+// it from view. Undo toast appears for 5 s for immediate recovery; the
+// 'Show deleted' toggle on the Comments card recovers older ones any
+// time after that.
+async function deleteComment(commentId, currentNcrId){
+  if(!commentId) return;
+  const confirmDel = window.confirm('Delete this comment?\n\nYou can restore it any time from "Show deleted" at the bottom of the Comments section.');
+  if(!confirmDel) return;
+
+  // Remove from DOM immediately for snappy feel
+  const el = document.querySelector(`[data-comment-id="${commentId}"]`);
+  if(el) el.remove();
+
+  // Persist soft-delete to Supabase
+  try{
+    await sbPatch('ncr_comments', commentId, {
+      deleted_at: new Date().toISOString(),
+      deleted_by: currentUser?.name || currentUser?.email || 'Unknown'
+    });
+  }catch(e){
+    showToast('⚠️ Could not delete: ' + (e.message||'unknown error'));
+    // Reload so the deleted-from-DOM element comes back
+    renderComments(currentNcrId);
+    return;
+  }
+
+  // Refresh deleted-count badge if 'Show deleted' is in DOM
+  updateDeletedCommentsBadge(currentNcrId);
+
+  // Show undo toast with a real Undo button (window.confirm doesn't do that)
+  showUndoToast('Comment deleted', async ()=>{
+    try{
+      await sbPatch('ncr_comments', commentId, {
+        deleted_at: null, deleted_by: null
+      });
+      showToast('✓ Comment restored');
+      renderComments(currentNcrId);
+    }catch(e){ showToast('⚠️ Could not restore: '+e.message); }
+  });
+}
+
+// Restore a soft-deleted comment (called from the 'Show deleted' panel)
+async function restoreComment(commentId, currentNcrId){
+  try{
+    await sbPatch('ncr_comments', commentId, {
+      deleted_at: null, deleted_by: null
+    });
+    showToast('✓ Comment restored');
+    renderComments(currentNcrId);
+  }catch(e){
+    showToast('⚠️ Could not restore: '+e.message);
+  }
+}
+
+// Toggle the 'Show N deleted comments' panel under the comments list
+async function toggleDeletedComments(ncrId){
+  const panel = document.getElementById('deletedCommentsPanel');
+  if(!panel) return;
+  if(panel.style.display === 'block'){
+    panel.style.display = 'none';
+    const btn = document.getElementById('deletedCommentsToggle');
+    if(btn) btn.dataset.open = '0';
+    return;
+  }
+  panel.style.display = 'block';
+  const btn = document.getElementById('deletedCommentsToggle');
+  if(btn) btn.dataset.open = '1';
+  panel.innerHTML = '<div style="color:var(--muted);font-size:11px;font-family:var(--mono);padding:6px 0">Loading…</div>';
+  const rows = await loadDeletedComments(ncrId);
+  if(!rows.length){
+    panel.innerHTML = '<div style="color:var(--faint);font-size:11px;font-family:var(--mono);padding:6px 0">No deleted comments.</div>';
+    return;
+  }
+  panel.innerHTML = rows.map(c => `
+    <div style="padding:8px 10px;background:rgba(239,68,68,.05);border-left:2px solid rgba(239,68,68,.4);border-radius:var(--r);margin-bottom:6px;opacity:.85">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:600;color:#fca5a5">${esc(c.author)}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Deleted by ${esc(c.deleted_by||'?')} · ${new Date(c.deleted_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+          <button onclick="restoreComment('${c.id}','${ncrId}')"
+            style="background:none;border:1px solid var(--green);color:var(--green);border-radius:var(--r);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer">Restore</button>
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.4;text-decoration:line-through">${esc(c.text)}</div>
+    </div>`).join('');
+}
+
+// Keep the 'Show N deleted' badge in sync with the actual count
+async function updateDeletedCommentsBadge(ncrId){
+  const btn = document.getElementById('deletedCommentsToggle');
+  if(!btn) return;
+  const rows = await loadDeletedComments(ncrId);
+  if(!rows.length){ btn.style.display='none'; return; }
+  btn.style.display='inline-flex';
+  btn.querySelector('[data-count]').textContent = rows.length;
+  // If the panel is currently open, refresh its contents too
+  if(btn.dataset.open === '1'){
+    const panel = document.getElementById('deletedCommentsPanel');
+    if(panel) toggleDeletedComments(ncrId);
+  }
+}
+
+// Toast with an Undo button. Persists ~6 s; clicking Undo invokes the
+// passed callback. Uses the existing toast container if present, else
+// creates a one-off element.
+function showUndoToast(message, onUndo){
+  // Remove any existing undo toast to avoid stacking
+  document.querySelectorAll('[data-undo-toast]').forEach(n=>n.remove());
+
+  const t = document.createElement('div');
+  t.setAttribute('data-undo-toast','1');
+  t.style.cssText = 'position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#1a1d24;color:#e8eaf0;border:1px solid #2a2e38;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:14px;z-index:10000;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:13px;animation:fade-in .2s';
+  t.innerHTML = '<span></span><button style="background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:6px;padding:4px 10px;font-size:11px;font-family:monospace;cursor:pointer;font-weight:600">UNDO</button>';
+  t.querySelector('span').textContent = message;
+  const btn = t.querySelector('button');
+  let invoked = false;
+  btn.onclick = async () => {
+    if(invoked) return;
+    invoked = true;
+    t.remove();
+    try{ await onUndo(); }catch(_){}
+  };
+  document.body.appendChild(t);
+  setTimeout(()=>{ if(!invoked) t.remove(); }, 6000);
 }
 
 async function addComment(ncrId){
@@ -6897,11 +7045,15 @@ async function addComment(ncrId){
     const noMsg=wrap.querySelector('[data-no-comments]');
     if(noMsg) noMsg.remove();
     const div=document.createElement('div');
+    div.dataset.commentId = comment.id;
     div.dataset.pending = '1';
     div.style.cssText='padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)';
-    div.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+    div.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px">'
       +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(comment.author)+'</span>'
-      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Just now · saving…</span></div>'
+      +'<span style="display:flex;align-items:center;gap:8px">'
+      +  '<span data-meta="1" style="font-size:10px;color:var(--muted);font-family:var(--mono)">Just now · saving…</span>'
+      +  '<button onclick="deleteComment(\''+comment.id+'\',\''+ncrId+'\')" title="Delete comment (recoverable)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;opacity:.6">✕</button>'
+      +'</span></div>'
       +'<div style="font-size:13px;line-height:1.5">'+esc(text)+'</div>';
     wrap.appendChild(div);
     wrap.scrollTop=wrap.scrollHeight;
@@ -6911,13 +7063,13 @@ async function addComment(ncrId){
     try{
       await sbUps('ncr_comments', comment);
       // Confirm in the DOM so the user knows it persisted
-      const meta = div.querySelector('span:last-child');
+      const meta = div.querySelector('[data-meta]');
       if(meta) meta.textContent = 'Just now';
       div.dataset.pending = '0';
     }catch(e){
       div.style.borderLeftColor = 'var(--red)';
       div.style.background = 'rgba(239,68,68,.08)';
-      const meta = div.querySelector('span:last-child');
+      const meta = div.querySelector('[data-meta]');
       if(meta){
         meta.style.color = 'var(--red)';
         meta.textContent = '⚠️ Did NOT save — refresh and it will be lost';
@@ -6937,16 +7089,149 @@ async function renderComments(ncrId){
     const comments=await loadComments(ncrId)||[];
     if(!comments.length){
       wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet — add one below.</div>';
-      return;
+    } else {
+      wrap.innerHTML=comments.map(c=>'<div data-comment-id="'+esc(c.id)+'" style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(c.author)+'</span>'
+        +'<span style="display:flex;align-items:center;gap:8px">'
+        +  '<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span>'
+        +  '<button onclick="deleteComment(\''+c.id+'\',\''+ncrId+'\')" title="Delete comment (recoverable)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;opacity:.6">✕</button>'
+        +'</span></div>'
+        +'<div style="font-size:13px;line-height:1.5">'+esc(c.text)+'</div></div>').join('');
     }
-    wrap.innerHTML=comments.map(c=>'<div style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
-      +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(c.author)+'</span>'
-      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>'
-      +'<div style="font-size:13px;line-height:1.5">'+esc(c.text)+'</div></div>').join('');
+    // Refresh the 'Show N deleted comments' toggle below the list
+    updateDeletedCommentsBadge(ncrId);
   }catch(e){
-    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet.</div>';
+    wrap.innerHTML='<div style="padding:10px;background:rgba(239,68,68,.08);border-left:2px solid var(--red);border-radius:var(--r);font-size:12px;font-family:var(--mono);color:var(--red)">⚠️ Could not load comments: '+esc(e.message||'unknown')+'</div>';
+    console.error('renderComments error:',e);
   }
+}
+
+// Self-test for the comments save/load round-trip. Returns a human-readable
+// log of each step so we can diagnose the persistence issue without console
+// access. Wired to a button on the Comments card header.
+async function diagnoseComments(ncrId){
+  const log = [];
+  const push = (icon, msg) => log.push(`${icon} ${msg}`);
+  const testId = 'diag_'+Date.now();
+  let testCommentExisted = false;
+
+  push('🔧', 'Starting diagnostic for NCR ' + ncrId);
+  push('🔧', 'Supabase URL: ' + (typeof SURL === 'string' ? SURL.replace(/^https?:\/\//,'').slice(0,30)+'…' : '(missing)'));
+  push('🔧', 'Anon key present: ' + (typeof SKEY === 'string' && SKEY.length > 20 ? 'yes' : 'NO'));
+
+  // Step 1: Does the table exist? Try a SELECT with limit 1.
+  push('→', 'Step 1: checking ncr_comments table exists…');
+  try{
+    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=*&limit=1`, {headers: SH});
+    if(r.status === 404){
+      push('❌', 'Step 1 FAILED: HTTP 404 — table "ncr_comments" does not exist');
+      return log.join('\n');
+    }
+    if(!r.ok){
+      const body = await r.text();
+      push('❌', `Step 1 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
+      return log.join('\n');
+    }
+    const rows = await r.json();
+    push('✓', `Step 1 OK: table exists, contains at least one queryable row (got ${rows.length})`);
+  }catch(e){
+    push('❌', 'Step 1 FAILED: network error — ' + e.message);
+    return log.join('\n');
+  }
+
+  // Step 2: Count rows for THIS NCR
+  push('→', 'Step 2: counting existing comments for this NCR…');
+  try{
+    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=id&ncr_id=eq.${encodeURIComponent(ncrId)}`, {headers: SH});
+    if(!r.ok){
+      const body = await r.text();
+      push('❌', `Step 2 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
+      push('⚠️', 'This likely means SELECT is being blocked by an RLS policy on ncr_comments');
+    }else{
+      const rows = await r.json();
+      push('✓', `Step 2 OK: ${rows.length} comment row(s) exist in DB for this NCR`);
+      if(rows.length > 0) push('💡', 'Comments ARE saved. The bug is in loading — not saving.');
+    }
+  }catch(e){
+    push('❌', 'Step 2 FAILED: ' + e.message);
+  }
+
+  // Step 3: Try to write a test comment
+  push('→', 'Step 3: writing a test comment…');
+  const testRow = {
+    id: testId, ncr_id: ncrId,
+    text: '[diagnostic test — safe to delete]',
+    author: 'Diagnostic',
+    created_at: new Date().toISOString()
+  };
+  try{
+    const r = await fetch(`${SURL}/rest/v1/ncr_comments`, {
+      method:'POST',
+      headers: {...SH, 'Prefer':'return=representation'},
+      body: JSON.stringify(testRow)
+    });
+    if(!r.ok){
+      const body = await r.text();
+      push('❌', `Step 3 FAILED: HTTP ${r.status} — ${body.slice(0,300)}`);
+      push('⚠️', 'Common causes: RLS blocking INSERT for anon, missing column, type mismatch');
+      return log.join('\n');
+    }
+    push('✓', 'Step 3 OK: test comment written successfully');
+    testCommentExisted = true;
+  }catch(e){
+    push('❌', 'Step 3 FAILED: ' + e.message);
+    return log.join('\n');
+  }
+
+  // Step 4: Read it back
+  push('→', 'Step 4: reading the test comment back…');
+  try{
+    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=*&id=eq.${testId}`, {headers: SH});
+    if(!r.ok){
+      const body = await r.text();
+      push('❌', `Step 4 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
+    }else{
+      const rows = await r.json();
+      if(rows.length){
+        push('✓', 'Step 4 OK: test comment read back successfully');
+        push('💡', 'Save and load BOTH work for the diagnostic — comments should persist.');
+      }else{
+        push('❌', 'Step 4 ANOMALY: row was written but cannot be read — RLS likely blocks SELECT for anon');
+      }
+    }
+  }catch(e){
+    push('❌', 'Step 4 FAILED: ' + e.message);
+  }
+
+  // Step 5: Test the actual loadComments function (the same code the app uses)
+  push('→', 'Step 5: testing the app\'s loadComments() function…');
+  try{
+    const rows = await loadComments(ncrId);
+    push('✓', `Step 5 OK: loadComments returned ${rows.length} row(s)`);
+    if(rows.length === 0) push('⚠️', 'loadComments returned empty even though step 2 saw rows — there\'s a query bug');
+  }catch(e){
+    push('❌', 'Step 5 FAILED: ' + e.message);
+  }
+
+  // Cleanup
+  if(testCommentExisted){
+    push('→', 'Cleaning up test comment…');
+    try{
+      await fetch(`${SURL}/rest/v1/ncr_comments?id=eq.${testId}`, {method:'DELETE', headers: SH});
+      push('✓', 'Cleanup done');
+    }catch(_){ push('⚠️', 'Cleanup failed — you may need to delete the diagnostic row manually'); }
+  }
+
+  return log.join('\n');
+}
+
+async function runCommentsDiagnostic(ncrId){
+  const out = document.getElementById('commentsDiagOutput');
+  if(out){ out.style.display='block'; out.textContent = 'Running diagnostic…\n'; }
+  const result = await diagnoseComments(ncrId);
+  if(out){ out.textContent = result; }
+  console.log(result);
 }
 // ═══════════════════════════════════════════════════════════════
 function openContactedModal(ncrId){
