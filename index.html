@@ -237,20 +237,6 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
       <div class="alc-err" id="setupErr"></div>
       <button class="alc-btn" onclick="doSetupAdmin()">Create SuperAdmin account →</button>
     </div>
-
-    <!-- Forced password change (after legacy login or admin reset) -->
-    <div id="loginForcedChangePanel" style="display:none">
-      <h2 style="font-size:20px;font-weight:600;margin-bottom:6px">Set a new password</h2>
-      <p id="forcedChangeReason" style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5">For security, you must set a new password before continuing.</p>
-      <div class="alc-field"><label>New password</label>
-        <input type="password" id="forcedNewPass" placeholder="Min 8 characters" autocomplete="new-password"
-          onkeydown="if(event.key==='Enter')document.getElementById('forcedConfirmPass').focus()"></div>
-      <div class="alc-field"><label>Confirm new password</label>
-        <input type="password" id="forcedConfirmPass" placeholder="Repeat new password" autocomplete="new-password"
-          onkeydown="if(event.key==='Enter')submitForcedPasswordChange()"></div>
-      <div class="alc-err" id="forcedChangeErr"></div>
-      <button class="alc-btn" onclick="submitForcedPasswordChange()" id="forcedChangeBtn">Update password &amp; continue →</button>
-    </div>
   </div>
 </div>
 
@@ -425,14 +411,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
 
-      <!-- Bottom row — secondary charts, collapsed by default to reduce clutter -->
-      <div style="margin-top:14px">
-        <button type="button" id="dashChartsToggle" onclick="toggleDashCharts()"
-          style="width:100%;background:none;border:1px dashed var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:11px;padding:8px 12px;cursor:pointer;text-align:left;letter-spacing:.05em">
-          + Show charts (weekly trend · top fault categories · error type breakdown)
-        </button>
-      </div>
-      <div id="dashChartsWrap" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+      <!-- Bottom row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
         <div class="detail-card" style="overflow-y:auto">
           <h4>Weekly trend</h4>
           <div class="bar-chart" id="deptChart"></div>
@@ -892,8 +872,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
               <input type="text" id="uEmail" placeholder="jane@solidcor.co.uk"></div>
           </div>
           <div class="form-cols">
-            <div class="form-row"><label>Password * <span style="color:var(--muted);font-weight:400;font-size:11px">(min 6 characters)</span></label>
-              <input type="password" id="uPin" placeholder="Min 6 characters" maxlength="100"></div>
+            <div class="form-row"><label>PIN * <span style="color:var(--muted);font-weight:400;font-size:11px">(4–6 digits)</span></label>
+              <input type="password" id="uPin" placeholder="e.g. 1234" maxlength="10"></div>
             <div class="form-row"><label>Role</label>
               <select id="uRole" onchange="renderPermissionToggles()">
                 <option value="admin">Admin</option>
@@ -915,58 +895,21 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         </div>
       </div>
 
-      <!-- Change own password modal -->
+      <!-- Change own PIN modal -->
       <div class="modal-overlay hidden" id="changePinModal">
         <div class="modal" style="width:min(360px,95vw)">
-          <h3>🔑 Change password</h3>
-          <div class="form-row"><label>Current password</label>
-            <input type="password" id="cpCurrent" placeholder="Enter current password" maxlength="100"></div>
-          <div class="form-row"><label>New password</label>
-            <input type="password" id="cpNew" placeholder="Min 6 characters" maxlength="100"></div>
-          <div class="form-row"><label>Confirm new password</label>
-            <input type="password" id="cpConfirm" placeholder="Repeat new password" maxlength="100"></div>
+          <h3>🔑 Change PIN</h3>
+          <div class="form-row"><label>Current PIN</label>
+            <input type="password" id="cpCurrent" placeholder="Enter current PIN" maxlength="10"></div>
+          <div class="form-row"><label>New PIN</label>
+            <input type="password" id="cpNew" placeholder="4–6 digits" maxlength="10"></div>
+          <div class="form-row"><label>Confirm new PIN</label>
+            <input type="password" id="cpConfirm" placeholder="Repeat new PIN" maxlength="10"></div>
           <div id="cpErr" style="font-size:12px;color:var(--red);font-family:var(--mono);margin-top:4px;min-height:16px"></div>
           <div class="modal-actions">
             <button class="ghost" onclick="closeModal('changePinModal')">Cancel</button>
-            <button class="primary" onclick="savePinChange()">Update password</button>
+            <button class="primary" onclick="savePinChange()">Update PIN</button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RCA Refine modal — teach the AI by correcting its analysis -->
-    <div class="modal-overlay hidden" id="rcaRefineModal">
-      <div class="modal" style="width:min(640px,95vw);max-height:90vh;overflow-y:auto">
-        <h3>✏️ Refine this analysis</h3>
-        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;padding:10px;background:rgba(139,92,246,.06);border-radius:var(--r);border-left:2px solid #a78bfa">
-          Edit the fields below with what the analysis <em>should</em> have said. Your version gets saved as the team-approved answer and used as guidance for future RCAs on similar NCRs.
-        </div>
-        <input type="hidden" id="rcaRefineNcrId">
-
-        <div class="form-row">
-          <label>Root cause</label>
-          <textarea id="rcaRefineRoot" rows="2" placeholder="What's the actual root cause?"
-            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
-        </div>
-        <div class="form-row">
-          <label>Corrective action <span style="color:var(--muted);font-weight:400;font-size:11px">(fix this specific issue)</span></label>
-          <textarea id="rcaRefineCorrective" rows="2"
-            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
-        </div>
-        <div class="form-row">
-          <label>Preventive action <span style="color:var(--muted);font-weight:400;font-size:11px">(stop recurrence)</span></label>
-          <textarea id="rcaRefinePreventive" rows="2"
-            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
-        </div>
-        <div class="form-row">
-          <label>Notes for future AI training <span style="color:var(--muted);font-weight:400;font-size:11px">(optional — what did the AI miss?)</span></label>
-          <textarea id="rcaRefineNotes" rows="2" placeholder="e.g. The AI missed that this machine has a known clutch issue; whenever you see this fault pattern check station 3 first"
-            style="width:100%;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
-        </div>
-        <div id="rcaRefineErr" style="font-size:12px;color:var(--red);font-family:var(--mono);margin-top:4px;min-height:16px"></div>
-        <div class="modal-actions">
-          <button class="ghost" onclick="closeModal('rcaRefineModal')">Cancel</button>
-          <button class="primary" onclick="saveRcaRefinement()">Save & teach the AI</button>
         </div>
       </div>
     </div>
@@ -1061,10 +1004,12 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           </div>
         </div>
 
-        <!-- API Key (moved server-side) -->
+        <!-- API Key -->
         <div style="background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:18px;margin-bottom:16px">
           <div style="font-weight:600;font-size:13px;margin-bottom:4px">🤖 Anthropic API key</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);line-height:1.5">For security, the API key is now held server-side as the <code style="color:var(--accent)">ANTHROPIC_API_KEY</code> environment variable on the Netlify function. Set or rotate it in Netlify → Site settings → Environment variables. The key is never sent to the browser.</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Used for door sheet scanning. Get your key at console.anthropic.com</div>
+          <input type="password" id="ejs_anthropic_key" placeholder="sk-ant-api03-…"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:12px;box-sizing:border-box">
         </div>
 
         <!-- Email routing -->
@@ -1115,7 +1060,7 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <div style="display:flex;gap:8px">
           <button class="top-btn primary" onclick="saveSettings()">💾 Save settings</button>
           <button class="top-btn ghost" onclick="sendTestEmail()">📧 Send test email</button>
-          <button class="top-btn ghost" id="btnChangePinSettings" style="display:none" onclick="openModal('changePinModal')">🔑 Change my password</button>
+          <button class="top-btn ghost" id="btnChangePinSettings" style="display:none" onclick="openModal('changePinModal')">🔑 Change my PIN</button>
         </div>
         <div id="settingsStatus" style="margin-top:10px;font-size:12px;font-family:var(--mono);color:var(--green)"></div>
 
@@ -1221,6 +1166,23 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     </div>
     <div class="form-row"><label>Customer email <span style="color:var(--muted);font-weight:400">(for updates)</span></label>
       <input type="email" id="extNcrEmail" placeholder="email@company.com" autocomplete="email">
+    </div>
+
+    <div class="form-row">
+      <label>Attachments <span style="color:var(--muted);font-weight:400">(drag emails, images, PDFs directly here)</span></label>
+      <div id="extNcrDropZone"
+        style="border:2px dashed var(--border2);border-radius:var(--r);padding:16px;text-align:center;cursor:pointer;transition:all .15s;margin-top:4px"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
+        ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
+        ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleExtNcrDrop(event)"
+        onclick="document.getElementById('extNcrFileInput').click()">
+        <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">📎 Drop files here or click to browse</div>
+        <div style="font-size:10px;color:var(--faint);font-family:var(--mono);margin-top:3px">Images · PDFs · Emails (.eml/.msg) · Word · Excel</div>
+        <div id="extNcrFileList" style="margin-top:8px"></div>
+      </div>
+      <input type="file" id="extNcrFileInput" multiple
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt"
+        style="display:none" onchange="handleExtNcrFiles(event)">
     </div>
     <div id="extNcrErr" style="color:var(--red);font-size:12px;font-family:var(--mono);min-height:16px;margin-bottom:8px"></div>
     <div class="modal-actions">
@@ -1395,65 +1357,25 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="System Error">💻 System error</option>
         </select>
       </div>
-      <div class="form-row"><label>Severity <span class="req-star">*</span></label>
-        <select id="ncrSeverity">
-          <option value="Minor">🟢 Minor</option>
-          <option value="Major" selected>🟠 Major</option>
-          <option value="Critical">🔴 Critical</option>
-          <option value="Safety">⚠️ Safety</option>
-        </select>
+      <div class="form-row"><label>Door style</label>
+        <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
       </div>
     </div>
-
-    <!-- More details — optional categorisation, defaults to collapsed -->
-    <div style="margin:6px 0 14px">
-      <button type="button" id="raiseMoreToggle" onclick="toggleRaiseMore()"
-        style="background:none;border:1px dashed var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:11px;padding:7px 12px;cursor:pointer;width:100%;text-align:left;letter-spacing:.05em">
-        + Show optional details (error type, door style, colours, units, cost)
-      </button>
-    </div>
-    <div id="raiseMoreWrap" style="display:none">
-      <div class="form-cols">
-        <div class="form-row"><label>Error type</label>
-          <select id="ncrErrorType">
-            <option value="">— select —</option>
-            <option value="Human Error">👤 Human error</option>
-            <option value="Machine Error">⚙️ Machine error</option>
-            <option value="Process Error">📋 Process error</option>
-            <option value="Design Error">📐 Design error</option>
-            <option value="Supplier Error">📦 Supplier error</option>
-            <option value="System Error">💻 System error</option>
-          </select>
-        </div>
-        <div class="form-row"><label>Door style</label>
-          <input type="text" id="ncrDoorStyle" placeholder="e.g. Brampton, Curbar…">
-        </div>
+    <div class="form-cols">
+      <div class="form-row"><label>Door / slab number <span class="req-star">*</span></label>
+        <input type="text" id="ncrDoorRef" placeholder="e.g. 5929-0113D">
       </div>
-      <div class="form-cols">
-        <div class="form-row"><label>Door type</label>
-          <input type="text" id="ncrDoorType" placeholder="T30, T60, R30…">
-        </div>
-        <div class="form-row"><label>Internal colour</label>
-          <input type="text" id="ncrColourInt" placeholder="e.g. White, Grey…">
-        </div>
-        <div class="form-row"><label>External colour</label>
-          <input type="text" id="ncrColourExt" placeholder="e.g. Black, Anthracite…">
-        </div>
-      </div>
-      <div class="form-cols">
-        <div class="form-row"><label>Unit count</label>
-          <input type="number" id="ncrUnits" placeholder="1" min="0">
-        </div>
-        <div class="form-row"><label>Estimated cost (£)</label>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="number" id="ncrCost" placeholder="0.00" step="0.01" style="flex:1">
-            <button type="button" class="ghost sm" onclick="openCompPicker()" title="Pick from components list" style="white-space:nowrap">🧩 Pick</button>
-          </div>
-        </div>
+      <div class="form-row"><label>Door type</label>
+        <input type="text" id="ncrDoorType" placeholder="T30, T60, R30…">
       </div>
     </div>
-    <div class="form-row"><label>Door / slab number <span class="req-star">*</span></label>
-      <input type="text" id="ncrDoorRef" placeholder="e.g. 5929-0113D">
+    <div class="form-cols">
+      <div class="form-row"><label>Internal colour</label>
+        <input type="text" id="ncrColourInt" placeholder="e.g. White, Grey…">
+      </div>
+      <div class="form-row"><label>External colour</label>
+        <input type="text" id="ncrColourExt" placeholder="e.g. Black, Anthracite…">
+      </div>
     </div>
     <div class="form-row"><label>Issue description <span class="req-star">*</span></label>
       <textarea id="ncrIssue" rows="3" placeholder="Describe the defect or issue clearly…"></textarea>
@@ -1488,6 +1410,17 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
         <input type="hidden" id="ncrCategory">
         <input type="text" id="ncrCategoryOther" placeholder="Describe the fault type…"
           style="display:none;margin-top:8px;width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);box-sizing:border-box">
+      </div>
+    </div>
+    <div class="form-cols">
+      <div class="form-row"><label>Unit count</label>
+        <input type="number" id="ncrUnits" placeholder="1" min="0">
+      </div>
+      <div class="form-row"><label>Estimated cost (£)</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="number" id="ncrCost" placeholder="0.00" step="0.01" style="flex:1">
+          <button type="button" class="ghost sm" onclick="openCompPicker()" title="Pick from components list" style="white-space:nowrap">🧩 Pick</button>
+        </div>
       </div>
     </div>
     <div class="form-row"><label>Action to rectify</label>
@@ -1606,8 +1539,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
   <div class="modal">
     <h3>↩️ Log Return</h3>
     <div class="form-cols">
-      <div class="form-row"><label>NCR number <span style="color:var(--muted);font-weight:400;font-size:11px">(optional — leave blank to auto-create)</span></label>
-        <input type="text" id="retNcr" placeholder="NCR26-001 — or leave blank" list="ncrList">
+      <div class="form-row"><label>NCR number</label>
+        <input type="text" id="retNcr" placeholder="NCR26-001" list="ncrList">
         <datalist id="ncrList"></datalist>
       </div>
       <div class="form-row"><label>Customer</label>
@@ -1656,29 +1589,8 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     <div class="form-row"><label>Root cause</label>
       <textarea id="editRootCause" rows="2" style="resize:vertical"></textarea>
     </div>
-    <div class="form-row"><label>Corrective action <span style="color:var(--muted);font-weight:400;font-size:11px">(fixes the immediate problem)</span></label>
+    <div class="form-row"><label>Corrective action</label>
       <textarea id="editCorrective" rows="2" style="resize:vertical"></textarea>
-    </div>
-    <div class="form-row"><label>Preventive action <span style="color:var(--muted);font-weight:400;font-size:11px">(stops it happening again — ISO 9001 §10.2)</span></label>
-      <textarea id="editPreventive" rows="2" style="resize:vertical"></textarea>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Effectiveness review due</label>
-        <input type="date" id="editEffDue">
-      </div>
-      <div class="form-row"><label>Effectiveness review date</label>
-        <input type="date" id="editEffDate">
-      </div>
-      <div class="form-row"><label>Effectiveness outcome</label>
-        <select id="editEffOutcome">
-          <option value="">— not reviewed —</option>
-          <option value="effective">✅ Effective</option>
-          <option value="ineffective">⚠️ Ineffective — re-open</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row"><label>Effectiveness review notes</label>
-      <textarea id="editEffNotes" rows="2" style="resize:vertical" placeholder="What evidence proves the action worked (or didn't)?"></textarea>
     </div>
     <div class="form-cols">
       <div class="form-row"><label>Category</label>
@@ -1707,15 +1619,6 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
           <option value="Design Error">📐 Design error</option>
           <option value="Supplier Error">📦 Supplier error</option>
           <option value="System Error">💻 System error</option>
-        </select>
-      </div>
-      <div class="form-row"><label>Severity</label>
-        <select id="editSeverity">
-          <option value="">— not set —</option>
-          <option value="Minor">🟢 Minor</option>
-          <option value="Major">🟠 Major</option>
-          <option value="Critical">🔴 Critical</option>
-          <option value="Safety">⚠️ Safety</option>
         </select>
       </div>
     </div>
@@ -1792,67 +1695,6 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ─── Password hashing (PBKDF2-SHA256, salted) ─────────────────────────
-// Migration from legacy unsalted SHA-256. Existing rows have
-// password_algo='sha256' (or null) and no salt. On successful login with
-// the legacy algo, the user is forced to set a new password which is
-// stored with algo='pbkdf2-sha256' + a fresh random salt.
-const PBKDF2_ITERATIONS = 100000;
-
-function randomSalt(){
-  const arr = new Uint8Array(16);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-async function hashPasswordPBKDF2(password, salt, iterations){
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits(
-    { name:'PBKDF2', salt: enc.encode(salt), iterations: iterations||PBKDF2_ITERATIONS, hash:'SHA-256' },
-    key, 256
-  );
-  return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-// Constant-time hex string compare. Both args are hex of identical
-// length in normal use; we still defend against length mismatch.
-function constantTimeHexEq(a, b){
-  if(typeof a!=='string'||typeof b!=='string') return false;
-  if(a.length!==b.length) return false;
-  let diff = 0;
-  for(let i=0;i<a.length;i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-// Verify a plaintext password against a user record from ncr_admin_users.
-// Returns { ok:boolean, legacy:boolean }.  legacy=true means the password
-// was correct but stored with the old SHA-256 scheme and must be migrated.
-async function verifyUserPassword(user, plaintext){
-  if(!user || !plaintext) return { ok:false, legacy:false };
-  const algo = user.password_algo || 'sha256';
-  if(algo === 'pbkdf2-sha256' && user.password_salt){
-    const h = await hashPasswordPBKDF2(plaintext, user.password_salt);
-    return { ok: constantTimeHexEq(h, user.password_hash||''), legacy:false };
-  }
-  // Legacy: unsalted SHA-256
-  const h = await sha256(plaintext);
-  return { ok: constantTimeHexEq(h, user.password_hash||''), legacy:true };
-}
-
-// Produce the fields needed to store a password with the new scheme.
-async function buildNewPasswordFields(plaintext){
-  const salt = randomSalt();
-  const hash = await hashPasswordPBKDF2(plaintext, salt);
-  return {
-    password_hash: hash,
-    password_salt: salt,
-    password_algo: 'pbkdf2-sha256',
-    password_changed_at: new Date().toISOString(),
-    must_change_password: false
-  };
-}
-
 const NCR_SESSION_KEY='ncr_admin_session';
 
 function saveSession(user){
@@ -1875,12 +1717,6 @@ async function checkAuthOnLoad(){
   const sess=loadSession();
   if(sess){
     currentUser=sess;
-    // If the session was saved mid-migration, force the change before
-    // they get to use the app.
-    if(sess.mustChangePassword){
-      showForcedPasswordChange(true);
-      return;
-    }
     document.getElementById('loginGate').classList.add('hidden');
     finishLogin(true);
     return;
@@ -1905,10 +1741,9 @@ async function doAdminLogin(){
   err.textContent='';btn.disabled=true;btn.textContent='Signing in…';
 
   try{
-    // Fetch the user record by email only. Password verification happens
-    // locally so we can read the per-user salt + algo first.
+    const hash=await sha256(pass);
     const results=await sbGet('ncr_admin_users',
-      `email=eq.${encodeURIComponent(email)}&active=eq.true&limit=1`
+      `email=eq.${encodeURIComponent(email)}&password_hash=eq.${hash}&active=eq.true`
     ).catch(()=>[]);
 
     if(!results.length){
@@ -1919,35 +1754,14 @@ async function doAdminLogin(){
     }
 
     const user=results[0];
-    const { ok, legacy } = await verifyUserPassword(user, pass);
-    if(!ok){
-      err.textContent='⚠️ Incorrect email or password';
-      btn.disabled=false;btn.textContent='Sign in →';
-      document.getElementById('adminPass').value='';
-      return;
-    }
-
     const perms=user.role==='superadmin'?SUPERADMIN_PERMS:(user.permissions||{});
-    const mustChange = !!user.must_change_password || legacy;
-    currentUser={
-      id:user.id, name:user.name, email:user.email, shift:'Admin',
-      role:user.role, permissions:perms, isAdmin:true,
-      mustChangePassword: mustChange
-    };
+    currentUser={id:user.id,name:user.name,email:user.email,shift:'Admin',role:user.role,permissions:perms,isAdmin:true};
     saveSession(currentUser);
 
     sbPatch('ncr_admin_users',user.id,{last_login:new Date().toISOString()}).catch(()=>{});
 
-    document.getElementById('adminPass').value='';
-
-    if(mustChange){
-      // Don't drop the login gate yet — show the forced-change modal on top.
-      // finishLogin runs after a successful password change.
-      showForcedPasswordChange(legacy);
-      return;
-    }
-
     document.getElementById('loginGate').classList.add('hidden');
+    document.getElementById('adminPass').value='';
     finishLogin(false);
 
   }catch(e){
@@ -1964,12 +1778,11 @@ async function doSetupAdmin(){
   if(!name||!email||!pass){err.textContent='⚠️ All fields required';return;}
   if(pass.length<6){err.textContent='⚠️ Password must be at least 6 characters';return;}
   try{
-    const pwd=await buildNewPasswordFields(pass);
+    const hash=await sha256(pass);
     await sbUps('ncr_admin_users',{
       id:'superadmin_'+Date.now(),name,email,
-      role:'superadmin',
-      permissions:SUPERADMIN_PERMS,active:true,
-      ...pwd
+      password_hash:hash,role:'superadmin',
+      permissions:SUPERADMIN_PERMS,active:true
     });
     document.getElementById('setupErr').textContent='';
     document.getElementById('setupName').value='';
@@ -1992,55 +1805,6 @@ function doLogout(){
   document.getElementById('adminLoginErr').textContent='';
   document.getElementById('adminLoginBtn').disabled=false;
   document.getElementById('adminLoginBtn').textContent='Sign in →';
-}
-
-// ─── Forced password change after legacy login or admin reset ────────
-function showForcedPasswordChange(isLegacy){
-  document.getElementById('loginAdminPanel').style.display='none';
-  document.getElementById('loginSetupPanel').style.display='none';
-  document.getElementById('loginForcedChangePanel').style.display='block';
-  document.getElementById('loginGate').classList.remove('hidden');
-  document.getElementById('forcedChangeReason').textContent = isLegacy
-    ? 'Your password was stored using an older hashing scheme. Please set a new password — your old one will stop working after this.'
-    : 'An administrator set a temporary password for you. Choose a new one before continuing.';
-  document.getElementById('forcedNewPass').value='';
-  document.getElementById('forcedConfirmPass').value='';
-  document.getElementById('forcedChangeErr').textContent='';
-  setTimeout(()=>document.getElementById('forcedNewPass').focus(), 50);
-}
-
-async function submitForcedPasswordChange(){
-  const err=document.getElementById('forcedChangeErr');
-  const btn=document.getElementById('forcedChangeBtn');
-  const newPass=document.getElementById('forcedNewPass').value;
-  const confirmPass=document.getElementById('forcedConfirmPass').value;
-  if(!newPass||!confirmPass){err.textContent='⚠️ Both fields are required';return;}
-  if(newPass!==confirmPass){err.textContent='⚠️ Passwords do not match';return;}
-  if(newPass.length<8){err.textContent='⚠️ Password must be at least 8 characters';return;}
-  if(!currentUser||!currentUser.id){err.textContent='⚠️ Session error — please sign in again';return;}
-
-  err.textContent='';btn.disabled=true;btn.textContent='Updating…';
-  try{
-    const pwd=await buildNewPasswordFields(newPass);
-    await sbPatch('ncr_admin_users', currentUser.id, pwd);
-
-    // Clear the must-change flag on the in-memory session
-    currentUser.mustChangePassword=false;
-    saveSession(currentUser);
-
-    // Tidy and complete login
-    document.getElementById('forcedNewPass').value='';
-    document.getElementById('forcedConfirmPass').value='';
-    document.getElementById('loginForcedChangePanel').style.display='none';
-    document.getElementById('loginAdminPanel').style.display='block';
-    document.getElementById('loginGate').classList.add('hidden');
-    btn.disabled=false;btn.textContent='Update password & continue →';
-    showToast('✓ Password updated');
-    finishLogin(false);
-  }catch(e){
-    err.textContent='⚠️ Update failed: '+(e.message||'unknown error');
-    btn.disabled=false;btn.textContent='Update password & continue →';
-  }
 }
 
 // Operator QR code
@@ -2078,13 +1842,7 @@ async function saveUser(){
   const permissions={};
   document.querySelectorAll('#uPermToggles input[type=checkbox]').forEach(cb=>{permissions[cb.dataset.key]=cb.checked;});
   const obj={id,name,email,role,permissions,active:true};
-  if(pass){
-    const pwd=await buildNewPasswordFields(pass);
-    Object.assign(obj, pwd);
-    // For NEW users created by an admin, force change on first login —
-    // standard 'temp password' pattern. Admin-resets also force change.
-    obj.must_change_password = true;
-  }
+  if(pass) obj.password_hash=await sha256(pass);
   try{
     await sbUps('ncr_admin_users',obj);
     closeModal('userModal');
@@ -2102,16 +1860,10 @@ async function savePinChange(){
   if(!current||!newPass||!confirm_){err.textContent='⚠️ All fields required';return;}
   if(newPass!==confirm_){err.textContent='⚠️ Passwords do not match';return;}
   if(newPass.length<6){err.textContent='⚠️ Password must be at least 6 characters';return;}
-  if(newPass===current){err.textContent='⚠️ New password must differ from current';return;}
-
-  // Fetch user record (need salt/algo to verify current password)
-  const users=await sbGet('ncr_admin_users',`id=eq.${encodeURIComponent(currentUser.id)}&limit=1`).catch(()=>[]);
-  if(!users.length){err.textContent='⚠️ Account not found';return;}
-  const { ok } = await verifyUserPassword(users[0], current);
-  if(!ok){err.textContent='⚠️ Current password is incorrect';return;}
-
-  const pwd=await buildNewPasswordFields(newPass);
-  await sbPatch('ncr_admin_users', currentUser.id, pwd);
+  const currentHash=await sha256(current);
+  const users=await sbGet('ncr_admin_users',`id=eq.${currentUser.id}&password_hash=eq.${currentHash}`).catch(()=>[]);
+  if(!users.length){err.textContent='⚠️ Current password is incorrect';return;}
+  await sbPatch('ncr_admin_users',currentUser.id,{password_hash:await sha256(newPass)});
   closeModal('changePinModal');
   ['cpCurrent','cpNew','cpConfirm'].forEach(id=>document.getElementById(id).value='');
   showToast('✓ Password updated');
@@ -2154,28 +1906,11 @@ function finishLogin(fromSession=false){
 
 function applyPermissions(){
   const p=currentUser?.permissions||{};
-  // Top group — viewing NCRs and actions
   const map={
     'nav-dashboard':p.view_dashboard,'nav-all':p.view_all,
     'nav-external':p.view_external,'nav-internal':p.view_internal,
     'nav-actions':p.view_actions,'nav-returns':p.view_returns,
-    // Reports group — gated by view_dashboard. Customer-facing reports
-    // need view_external since they include customer NCR detail.
-    'nav-mgmtdash':p.view_dashboard,
-    'nav-slatracker':p.view_dashboard,
-    'nav-deliveries':p.view_dashboard,
-    'nav-reports':p.view_dashboard,
-    'nav-customerreport':p.view_external,
-    // Raise group — gated by raise_ncr permission
-    'nav-intncrqr':p.raise_ncr,
-    'nav-extncrqr':p.raise_ncr,
-    'nav-extncrform':p.raise_ncr,
-    'nav-raise':p.raise_ncr,
-    'nav-returnscan':p.view_returns,
-    // Admin group
-    'nav-import':p.manage_settings,
-    'nav-stocklist':p.manage_settings,
-    'nav-portal':true,  // public portal link visible to everyone
+    'nav-raise':p.raise_ncr,'nav-portal':true,
     'nav-components':p.manage_components,'nav-portalconfig':p.manage_portal,
     'nav-users':p.manage_users,'nav-settings':p.manage_settings,
   };
@@ -2187,7 +1922,23 @@ function applyPermissions(){
 }
 
 // Update user modal label from PIN to Password
-// (HTML labels are now correct directly — no runtime override needed.)
+document.addEventListener('DOMContentLoaded',()=>{
+  const pinLabel=document.querySelector('label[for="uPin"]');
+  // label is inline so find by content proximity to uPin
+  const uPinInput=document.getElementById('uPin');
+  if(uPinInput){
+    uPinInput.placeholder='Min 6 characters';
+    uPinInput.maxLength=100;
+    const lbl=uPinInput.previousElementSibling;
+    if(lbl&&lbl.tagName==='LABEL') lbl.textContent='Password'+(uPinInput.closest('.form-row')?'':'');
+  }
+  const cpCurrentLbl=document.querySelector('label[for="cpCurrent"]');
+  if(cpCurrentLbl) cpCurrentLbl.textContent='Current password';
+  const cpNewLbl=document.querySelector('label[for="cpNew"]');
+  if(cpNewLbl) cpNewLbl.textContent='New password';
+  const cpConfirmLbl=document.querySelector('label[for="cpConfirm"]');
+  if(cpConfirmLbl) cpConfirmLbl.textContent='Confirm new password';
+});
 
 // ═══════════════════════════════════════════════════════════════
 // USER MANAGEMENT
@@ -2335,7 +2086,7 @@ async function init(){
       }
     }
 
-    if(sbActions.length) actions = sbActions;
+    if(sbActions.length) actions = sbActions.map(normaliseAction);
     if(sbReturns.length) returns = sbReturns;
     maintAssets = sbAssets;
     ncrTaskRules = sbRules;
@@ -2437,26 +2188,6 @@ function renderDashboard(){
   const internal = ncrRecords.filter(r=>r.type==='internal');
   const extOpen = external.filter(r=>r.status==='open').length;
   const intOpen = internal.filter(r=>r.status==='open').length;
-  // Cost month-to-date plus same-period-last-month comparison for trend arrow
-  const _now = new Date();
-  const _monthStart = new Date(_now.getFullYear(), _now.getMonth(), 1);
-  const _prevMonthStart = new Date(_now.getFullYear(), _now.getMonth()-1, 1);
-  const _prevMonthSamePoint = new Date(_now.getFullYear(), _now.getMonth()-1, _now.getDate());
-  const _sumCost = (start, end) =>
-    ncrRecords.filter(r=>!r.legacy && r.date && new Date(r.date) >= start && new Date(r.date) < end)
-              .reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
-  const costMTD = _sumCost(_monthStart, _now);
-  const costPrevMTDsamePoint = _sumCost(_prevMonthStart, _prevMonthSamePoint);
-  const costDelta = costPrevMTDsamePoint
-    ? Math.round(((costMTD - costPrevMTDsamePoint) / costPrevMTDsamePoint) * 100)
-    : null;
-  const costTrend = costDelta===null ? ''
-    : (costDelta > 0
-        ? `<span style="color:var(--red)">▲ ${costDelta}% vs last month</span>`
-        : costDelta < 0
-          ? `<span style="color:var(--green)">▼ ${Math.abs(costDelta)}% vs last month</span>`
-          : `<span style="color:var(--muted)">— flat vs last month</span>`);
-  // Keep all-time total available — used elsewhere in reports
   const totalCost = ncrRecords.reduce((s,r)=>s+(r.cost||0)+(r.transport||0),0);
   const actPending = actions.filter(a=>a.status!=='done').length;
   const returnsOpen = returns.filter(r=>r.status==='pending'||r.status==='open').length;
@@ -2514,9 +2245,9 @@ function renderDashboard(){
       <div class="stat-sub">${SLA_DAYS}-day external target</div>
     </div>
     <div class="stat-card">
-      <div class="stat-val">£${costMTD.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
-      <div class="stat-label">Cost of quality (MTD)</div>
-      <div class="stat-sub">${costTrend||'no comparable period'}</div>
+      <div class="stat-val">£${totalCost.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="stat-label">Total NCR cost</div>
+      <div class="stat-sub">excl. legacy</div>
     </div>
   `;
 
@@ -2750,7 +2481,7 @@ function renderTable(type){
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
-        <td style="max-width:200px">${severityDot(r.severity)}${esc((r.issue||'').slice(0,55))}${(r.issue||'').length>55?'…':''}</td>
+        <td style="max-width:200px">${esc((r.issue||'').slice(0,55))}${(r.issue||'').length>55?'…':''}</td>
         <td style="font-size:12px;color:var(--muted)">${esc(r.raised_by||r.raisedBy||'—')}</td>
         <td><span class="badge b-dept">${esc(r.dept||'—')}</span></td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
@@ -2770,7 +2501,7 @@ function renderTable(type){
         <td class="mono">${fmtDate(r.date)}</td>
         <td>${esc(r.customer)}</td>
         <td class="mono" style="font-size:11px">${esc(r.door_ref||'—')}</td>
-        <td>${severityDot(r.severity)}${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
+        <td>${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td style="text-align:center">${r.customer_contacted
           ?`<span title="Contacted ${r.customer_contacted.slice(0,10)} by ${r.contact_confirmed_by||'—'}" style="color:var(--green);font-size:16px">✓</span>`
@@ -2790,7 +2521,7 @@ function renderTable(type){
         <td class="ncr-num">${esc(r.id)}</td>
         <td class="mono">${fmtDate(r.date)}</td>
         <td style="font-weight:500">${esc(r.raised_by||r.raisedBy||'—')}</td>
-        <td>${severityDot(r.severity)}${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
+        <td>${esc((r.issue||'').slice(0,60))}${(r.issue||'').length>60?'…':''}</td>
         <td><span class="badge b-dept">${esc(r.dept||'—')}</span></td>
         <td class="mono">£${((r.cost||0)+(r.transport||0)).toFixed(0)}</td>
         <td>${statusBadge(r.status)}</td>
@@ -2826,7 +2557,7 @@ function openDetail(id){
     ${currentUser?.role==='superadmin' ? `<button class="top-btn ghost" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteNcr('${id}')">🗑 Delete</button>` : ''}
   `;
 
-  const ncrActs = actions.filter(a=>(a.ncr_id||a.ncrId)===id);
+  const ncrActs = actions.filter(a=>(a.ncrId||a.ncr_id)===id);
 
   document.getElementById('detailMain').innerHTML = `
     <!-- Contact / submitter info panel -->
@@ -2873,29 +2604,13 @@ function openDetail(id){
     </div>
 
     <div class="detail-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-        <h4 style="margin:0">Issue description</h4>
-        ${r.severity?severityBadge(r.severity):''}
-      </div>
+      <h4>Issue description</h4>
       <p style="font-size:14px;color:var(--text);line-height:1.6">${esc(r.issue||'No description')}</p>
       ${r.root_cause?`<div style="margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--r);font-size:12px"><span style="color:var(--muted);font-family:var(--mono)">ROOT CAUSE: </span>${esc(r.root_cause)}</div>`:''}
       ${r.action?`<div style="margin-top:8px;padding:10px;background:rgba(224,123,26,.06);border-left:2px solid var(--accent);font-size:12px;border-radius:var(--r)">${esc(r.action)}</div>`:''}
     </div>
     ${r.corrective?`<div class="detail-card" style="border-left:3px solid var(--green)"><h4 style="color:var(--green)">✅ Corrective action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.corrective)}</p></div>`:''}
     ${r.preventive_action?`<div class="detail-card" style="border-left:3px solid #3b82f6"><h4 style="color:#3b82f6">🛡 Preventive action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.preventive_action)}</p></div>`:''}
-    ${(r.effectiveness_review_due||r.effectiveness_review_date)?`
-    <div class="detail-card" style="border-left:3px solid ${r.effectiveness_review_outcome==='effective'?'var(--green)':r.effectiveness_review_outcome==='ineffective'?'var(--red)':'#8b5cf6'}">
-      <h4 style="margin:0 0 8px;color:${r.effectiveness_review_outcome==='effective'?'var(--green)':r.effectiveness_review_outcome==='ineffective'?'var(--red)':'#8b5cf6'}">
-        🔁 Effectiveness review
-        ${r.effectiveness_review_outcome==='effective'?' — ✅ Effective':r.effectiveness_review_outcome==='ineffective'?' — ⚠️ Ineffective':' — pending'}
-      </h4>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;font-size:12px">
-        ${r.effectiveness_review_due?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Due</div><div>${r.effectiveness_review_due}</div></div>`:''}
-        ${r.effectiveness_review_date?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Reviewed</div><div>${r.effectiveness_review_date}</div></div>`:''}
-        ${r.effectiveness_review_by?`<div><div style="color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase">Reviewer</div><div>${esc(r.effectiveness_review_by)}</div></div>`:''}
-      </div>
-      ${r.effectiveness_review_notes?`<div style="margin-top:8px;padding:10px;background:var(--surface);border-radius:var(--r);font-size:13px;line-height:1.5">${esc(r.effectiveness_review_notes)}</div>`:''}
-    </div>`:''}
     ${r.type==='external'?`
     <div class="detail-card" style="border-left:3px solid ${r.customer_contacted?'var(--green)':'#8b5cf6'}">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -2919,75 +2634,47 @@ function openDetail(id){
         <div class="action-item">
           <div class="action-dot ${a.status==='done'?'done':a.status==='inprogress'?'pending':''}"></div>
           <div class="action-content" style="flex:1">
-            <div class="action-text">${esc(a.description||a.desc||'')}</div>
-            <div class="action-meta">${esc(a.dept||'—')} · Assigned: ${esc(a.assigned||'—')} · Due: ${(a.due_date||a.due)||'—'}</div>
+            <div class="action-text">${esc(a.desc)}</div>
+            <div class="action-meta">${esc(a.dept||'—')} · Assigned: ${esc(a.assigned||'—')} · Due: ${a.due||'—'}</div>
           </div>
           <div style="display:flex;gap:4px">
             <button class="top-btn ghost" style="padding:2px 8px;font-size:10px" onclick="toggleActionStatus('${a.id}')">${a.status==='done'?'↩ Reopen':'✓ Done'}</button>
           </div>
         </div>`).join(''):'<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No actions yet</div>'}
     </div>
-    <div class="detail-card collapsible-card" id="auditTrailCard">
-      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
-        <span>Edit history</span>
-        <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
-      </h4>
-      <div class="collapsible-body" style="display:none;margin-top:10px">
-        <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
+    <div class="detail-card" id="auditTrailCard">
+      <h4>Edit history</h4>
+      <div id="auditTrailBody" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
+    </div>
+
+    <div class="detail-card">
+      <h4>💬 Comments</h4>
+      <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="commentInput" placeholder="Add a comment or note…"
+          onkeydown="if(event.key==='Enter')addComment('${id}')"
+          style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
+        <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
       </div>
     </div>
 
-    <div class="detail-card collapsible-card">
-      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
-        <span>💬 Comments</span>
-        <span style="display:flex;align-items:center;gap:8px">
-          <button onclick="event.stopPropagation();runCommentsDiagnostic('${id}')"
-            style="background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--muted);font-family:var(--mono);font-size:9px;padding:3px 8px;cursor:pointer;letter-spacing:.05em"
-            title="Run a save/load test to find out why comments aren't persisting">🔧 Test</button>
-          <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▾</span>
-        </span>
-      </h4>
-      <div class="collapsible-body" style="display:block;margin-top:10px">
-        <pre id="commentsDiagOutput" style="display:none;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:10px;font-family:var(--mono);font-size:10px;color:var(--text);max-height:280px;overflow:auto;white-space:pre-wrap;margin:0 0 10px;line-height:1.45"></pre>
-        <div id="commentsWrap" style="margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="commentInput" placeholder="Add a comment or note…"
-            onkeydown="if(event.key==='Enter')addComment('${id}')"
-            style="flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px">
-          <button id="commentPostBtn" class="top-btn primary" style="padding:7px 14px" onclick="addComment('${id}')">Post</button>
-        </div>
-        <div style="margin-top:10px;border-top:1px dashed var(--border2);padding-top:8px">
-          <button id="deletedCommentsToggle" data-open="0" onclick="toggleDeletedComments('${id}')"
-            style="display:none;align-items:center;gap:6px;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;padding:2px 0;text-transform:uppercase;letter-spacing:.07em">
-            🗑 Show <span data-count>0</span> deleted comment(s)
-          </button>
-          <div id="deletedCommentsPanel" style="display:none;margin-top:8px"></div>
-        </div>
+    <div class="detail-card" id="doorSheetCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h4 style="margin:0">📎 Attachments</h4>
+        <label style="cursor:pointer">
+          <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
+          <span class="top-btn ghost" style="font-size:11px;padding:4px 10px">+ Add files</span>
+        </label>
       </div>
-    </div>
-
-    <div class="detail-card collapsible-card" id="doorSheetCard">
-      <h4 onclick="toggleCollapsible(this)" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin:0">
-        <span>📎 Attachments <span id="attachCount" style="font-weight:400;color:var(--muted);font-size:11px;font-family:var(--mono);margin-left:6px"></span></span>
-        <span style="display:flex;align-items:center;gap:10px">
-          <label onclick="event.stopPropagation()" style="cursor:pointer">
-            <input type="file" id="attachFileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.eml,.msg,.txt" style="display:none" onchange="handleAttachmentFiles(event,'${id}')">
-            <span class="top-btn ghost" style="font-size:11px;padding:4px 10px">+ Add files</span>
-          </label>
-          <span class="collapsible-chev" style="font-size:11px;color:var(--muted);font-family:var(--mono)">▸</span>
-        </span>
-      </h4>
-      <div class="collapsible-body" style="display:none;margin-top:10px">
-        <div id="attachDropZone" data-ncrid="${id}"
-          style="border:2px dashed var(--border2);border-radius:var(--r);padding:16px;text-align:center;color:var(--muted);font-size:12px;font-family:var(--mono);margin-bottom:10px;transition:all .15s;cursor:pointer"
-          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
-          ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
-          ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleAttachmentDrop(event,'${id}')"
-          onclick="document.getElementById('attachFileInput').click()">
-          Drag &amp; drop images, PDFs, emails or docs here
-        </div>
-        <div id="attachmentsList" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
+      <div id="attachDropZone" data-ncrid="${id}"
+        style="border:2px dashed var(--border2);border-radius:var(--r);padding:16px;text-align:center;color:var(--muted);font-size:12px;font-family:var(--mono);margin-bottom:10px;transition:all .15s;cursor:pointer"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
+        ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
+        ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleAttachmentDrop(event,'${id}')"
+        onclick="this.previousElementSibling.querySelector('input').click()">
+        Drag &amp; drop images, PDFs, emails or docs here
       </div>
+      <div id="attachmentsList" style="color:var(--faint);font-size:12px;font-family:var(--mono)">Loading…</div>
     </div>
 
     <div class="detail-card" id="rcaCard">
@@ -3070,6 +2757,19 @@ function openAddAction(ncrId){
   openModal('actionModal');
 }
 
+// Normalise action fields — Supabase uses description/ncr_id/due_date, UI uses desc/ncrId/due
+function normaliseAction(a){
+  return {
+    ...a,
+    desc: a.desc||a.description||'',
+    description: a.description||a.desc||'',
+    ncrId: a.ncrId||a.ncr_id||null,
+    ncr_id: a.ncr_id||a.ncrId||null,
+    due: a.due||a.due_date||null,
+    due_date: a.due_date||a.due||null,
+  };
+}
+
 function saveAction(){
   const desc = document.getElementById('actDesc').value.trim();
   if(!desc){showToast('⚠️ Enter an action description');return;}
@@ -3090,7 +2790,7 @@ function saveAction(){
     createdBy: currentUser?.name||'Unknown',
     created_at: new Date().toISOString()
   };
-  actions.push(act);
+  actions.push(normaliseAction(act));
   // Save to Supabase
   sbUps('ncr_actions', {
     id: act.id, ncr_id: ncrId,
@@ -3163,27 +2863,6 @@ async function saveDoorSheetImage(ncrId, dataUrl){
   await sbUps('ncr_images', img).catch(()=>{});
 }
 
-// Persist an array of user-uploaded photos (from ncrPhotos buffer or public portal) against an NCR.
-async function saveNcrPhotos(ncrId, photos, raisedBy){
-  if(!ncrId || !photos || !photos.length) return;
-  // Sequential, not parallel — Supabase upserts can deadlock when hammered.
-  for(let i=0;i<photos.length;i++){
-    const p = photos[i];
-    const data = p.data || p.dataUrl || p; // accept several shapes
-    if(!data) continue;
-    const img = {
-      id: 'img_'+Date.now()+'_'+i,
-      ncr_id: ncrId,
-      image_data: data,
-      image_type: 'photo',
-      file_name: p.name || ('photo_'+(i+1)+'.jpg'),
-      created_at: new Date().toISOString(),
-      created_by: raisedBy || currentUser?.name || 'Public portal'
-    };
-    await sbUps('ncr_images', img).catch(e=>console.warn('Photo save failed:', e.message));
-  }
-}
-
 async function loadNcrImages(ncrId){
   try{
     return await sbGet('ncr_images', `ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.desc`);
@@ -3194,9 +2873,6 @@ async function loadNcrAttachments(ncrId){
   const el = document.getElementById('attachmentsList');
   if(!el) return;
   const imgs = await loadNcrImages(ncrId);
-  // Surface count in the collapsed card heading so users know there's content
-  const countEl = document.getElementById('attachCount');
-  if(countEl) countEl.textContent = (imgs && imgs.length) ? `(${imgs.length})` : '';
   if(!imgs||!imgs.length){
     el.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">No attachments yet — drag files above or click "+ Add files"</div>';
     return;
@@ -3301,30 +2977,24 @@ function renderActions(){
   const search=(document.getElementById('actSearch')?.value||'').toLowerCase();
   const dept=document.getElementById('actDept')?.value||'';
   const stat=document.getElementById('actStatus')?.value||'';
-  // Helpers — actions loaded from Supabase have snake_case fields; in-memory
-  // freshly-created actions also have legacy camelCase. Always read both.
-  const aDesc = a => a.description || a.desc || '';
-  const aDue  = a => a.due_date    || a.due  || '';
-  const aNcr  = a => a.ncr_id      || a.ncrId|| '';
   let rows=actions.filter(a=>{
-    if(search&&![aNcr(a),aDesc(a),a.assigned,a.dept].join(' ').toLowerCase().includes(search))return false;
+    if(search&&![a.ncrId||a.ncr_id,a.desc||a.description,a.assigned,a.dept].join(' ').toLowerCase().includes(search))return false;
     if(dept&&a.dept!==dept)return false;
     if(stat&&a.status!==stat)return false;
     return true;
-  }).sort((a,b)=>(aDue(a)||'9999').localeCompare(aDue(b)||'9999'));
+  }).sort((a,b)=>((a.due||a.due_date)||'9999').localeCompare((b.due||b.due_date)||'9999'));
   const tbody=document.getElementById('tbody-actions');
   const ncr=(id)=>ncrRecords.find(r=>r.id===id)||{};
   tbody.innerHTML=rows.map(a=>{
-    const ncrId=aNcr(a);
-    const r=ncr(ncrId);
+    const r=ncr(a.ncrId||a.ncr_id);
     const dotCol=a.status==='done'?'var(--green)':a.status==='inprogress'?'var(--amber)':'var(--red)';
     return`<tr>
-      <td class="ncr-num" onclick="openDetail('${ncrId}')" style="cursor:pointer">${esc(ncrId||'—')}</td>
+      <td class="ncr-num" onclick="openDetail('${a.ncrId||a.ncr_id}')" style="cursor:pointer">${esc(a.ncrId||a.ncr_id||'—')}</td>
       <td>${esc(r.customer||'—')}</td>
-      <td>${esc(aDesc(a)||'—')}</td>
+      <td>${esc(a.desc||a.description||'—')}</td>
       <td><span class="badge b-dept">${esc(a.dept||'—')}</span></td>
       <td>${esc(a.assigned||'—')}</td>
-      <td class="mono">${aDue(a)||'—'}</td>
+      <td class="mono">${a.due||a.due_date||'—'}</td>
       <td><span class="badge" style="background:${dotCol}22;color:${dotCol}">${a.status}</span></td>
       <td><button class="top-btn ghost" style="padding:2px 8px;font-size:10px" onclick="toggleActionStatus('${a.id}')">${a.status==='done'?'↩':'✓ Done'}</button></td>
     </tr>`;
@@ -3341,56 +3011,16 @@ function openAddReturn(){
   document.getElementById('retNotes').value='';
   openModal('returnModal');
 }
-async function saveReturn(){
+function saveReturn(){
   const doorRef=document.getElementById('retDoorRef').value.trim();
   if(!doorRef){showToast('⚠️ Door reference is required');return;}
-
-  let linkedNcrId = document.getElementById('retNcr').value.trim()||null;
-  const customer = document.getElementById('retCustomer').value.trim();
-  const retType  = document.getElementById('retType').value;
-  const retDate  = document.getElementById('retDate').value||new Date().toISOString().slice(0,10);
-  const retNotes = document.getElementById('retNotes').value.trim();
-
-  // If no NCR linked, auto-create a stub external NCR so every return
-  // has a traceable parent. This stops the Returns log drifting out of
-  // sync with the NCR log over time.
-  if(!linkedNcrId){
-    const stubId = genNCRId(retDate);
-    const stubIssue = `Auto-created from return (${retType}) — door ${doorRef}` +
-                      (retNotes ? `. Notes: ${retNotes}` : '. No notes provided.');
-    const stub = {
-      id: stubId, date: retDate,
-      customer: customer || 'Unknown',
-      door_ref: doorRef,
-      ncr_type: 'Door',
-      issue: stubIssue,
-      type: 'external', status: 'open',
-      category: 'Return — '+retType,
-      dept: 'External',
-      cost: 0, transport: 0,
-      root_cause: '', corrective: '', completed: null,
-      legacy: false, error_type: null,
-      severity: retType==='credit' ? 'Major' : (retType==='inspect' ? 'Minor' : 'Major'),
-      raised_by: currentUser?.name || 'System (auto)',
-      source: 'auto_from_return'
-    };
-    ncrRecords.unshift(stub);
-    await sbUps('ncr_records', stub).catch(()=>{
-      const saved=JSON.parse(localStorage.getItem('ncr_new')||'[]');
-      saved.push(stub); localStorage.setItem('ncr_new',JSON.stringify(saved));
-    });
-    linkedNcrId = stubId;
-    // Refresh the NCR tables so the new stub is visible immediately
-    renderTable('all'); renderTable('external');
-    showToast(`✓ Created NCR ${stubId} for this return`);
-  }
-
   const ret={
     id:'ret_'+Date.now(),
-    ncr_id: linkedNcrId,
-    customer, door_ref:doorRef, type: retType,
-    date: retDate,
-    notes: retNotes,
+    ncr_id:document.getElementById('retNcr').value.trim()||null,
+    customer:document.getElementById('retCustomer').value.trim(),
+    door_ref:doorRef, type:document.getElementById('retType').value,
+    date:document.getElementById('retDate').value||new Date().toISOString().slice(0,10),
+    notes:document.getElementById('retNotes').value.trim(),
     status:'pending'
   };
   returns.push(ret);
@@ -3478,34 +3108,7 @@ function pickRaiseFault(btn){
   if(isOther) otherInput.focus();
 }
 
-function toggleRaiseMore(){
-  const wrap = document.getElementById('raiseMoreWrap');
-  const btn  = document.getElementById('raiseMoreToggle');
-  if(!wrap||!btn) return;
-  const isOpen = wrap.style.display !== 'none';
-  wrap.style.display = isOpen ? 'none' : 'block';
-  btn.textContent = isOpen
-    ? '+ Show optional details (error type, door style, colours, units, cost)'
-    : '− Hide optional details';
-}
-
-function toggleDashCharts(){
-  const wrap = document.getElementById('dashChartsWrap');
-  const btn  = document.getElementById('dashChartsToggle');
-  if(!wrap||!btn) return;
-  const isOpen = wrap.style.display !== 'none';
-  wrap.style.display = isOpen ? 'none' : 'grid';
-  btn.textContent = isOpen
-    ? '+ Show charts (weekly trend · top fault categories · error type breakdown)'
-    : '− Hide charts';
-}
-
 function openRaiseNCR(){
-  // Reset the 'More details' expander every time the modal opens
-  const moreWrap = document.getElementById('raiseMoreWrap');
-  const moreBtn  = document.getElementById('raiseMoreToggle');
-  if(moreWrap) moreWrap.style.display='none';
-  if(moreBtn)  moreBtn.textContent='+ Show optional details (error type, door style, colours, units, cost)';
   // Clear all text/select fields
   ['ncrCustomer','ncrSO','ncrDoorRef','ncrDoorType','ncrColourInt','ncrColourExt',
    'ncrIssue','ncrCustomerEmail','ncrDoorStyle','ncrAssignedTo'].forEach(id=>{
@@ -3569,8 +3172,18 @@ function renderNcrPhotoGrid(){
 
 async function scanDoorSheet(input){
   const file=input.files[0]; if(!file)return;
-  // API key is held server-side in ANTHROPIC_API_KEY env var on the Netlify function.
-  // The client must never see or send the key.
+
+  // Get API key from settings
+  const s=loadSettings();
+  const BAKED_KEY='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';
+  let apiKey=s.anthropic_key||BAKED_KEY;
+  if(!apiKey){
+    apiKey=prompt('Enter your Anthropic API key (sk-ant-...):\nThis will be saved in Settings.');
+    if(!apiKey){input.value='';return;}
+    const cfg={...s,anthropic_key:apiKey.trim()};
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify(cfg));
+    apiKey=apiKey.trim();
+  }
 
   document.getElementById('scanStatus').textContent='🤖 Reading door sheet…';
   const reader=new FileReader();
@@ -3663,7 +3276,6 @@ function submitNCR(){
     door_style:document.getElementById('ncrDoorStyle').value.trim(),
     ncr_type:document.getElementById('ncrType').value||'Door',
     error_type:document.getElementById('ncrErrorType').value||null,
-    severity:document.getElementById('ncrSeverity')?.value||'Major',
     customer_email:document.getElementById('ncrCustomerEmail').value.trim(),
     colour_int:document.getElementById('ncrColourInt').value.trim(),
     colour_ext:document.getElementById('ncrColourExt').value.trim(),
@@ -3697,12 +3309,6 @@ function submitNCR(){
   if(window._pendingDoorSheetImage){
     saveDoorSheetImage(id, window._pendingDoorSheetImage);
     window._pendingDoorSheetImage=null;
-  }
-
-  // Persist any photos the user attached via "+ Add photos"
-  if(ncrPhotos && ncrPhotos.length){
-    const photosToSave = ncrPhotos.slice(); // snapshot before we clear
-    saveNcrPhotos(id, photosToSave, raisedBy);
   }
 
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
@@ -4783,26 +4389,6 @@ function showExtNcrPortal(){
           <textarea id="ep_fault" rows="4" placeholder="Please describe the fault in as much detail as possible…"
             style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea></div>
 
-        <!-- Photos -->
-        <div>
-          <label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Photos <span style="color:#7a7e8a;font-weight:400;text-transform:none">(optional — adds JPG/PNG, up to 10MB each)</span></label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-            <label style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:13px;cursor:pointer">
-              📷 Take photo
-              <input type="file" id="ep_photo_camera" accept="image/*" capture="environment" style="display:none" onchange="epAddPhotos(this)">
-            </label>
-            <label style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:13px;cursor:pointer">
-              📁 Upload images
-              <input type="file" id="ep_photo_upload" accept="image/*" multiple style="display:none" onchange="epAddPhotos(this)">
-            </label>
-          </div>
-          <div id="ep_photo_grid" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-        </div>
-
-        <!-- Honeypot: real users do not see this; bots fill every field -->
-        <input id="ep_website" name="website" type="text" tabindex="-1" autocomplete="off"
-          style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
-
         <div><label style="font-size:11px;color:#7a7e8a;font-family:monospace;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:5px">Email address <span style="color:#7a7e8a;font-weight:400;text-transform:none">(for updates)</span></label>
           <input id="ep_email" type="email" autocomplete="email" placeholder="your@email.com"
             style="width:100%;padding:10px 12px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;color:#e8eaf0;font-size:14px;box-sizing:border-box"></div>
@@ -4828,45 +4414,6 @@ function showExtNcrPortal(){
   if(_savedExtName && document.getElementById('ep_name')){
     document.getElementById('ep_name').value = _savedExtName;
   }
-
-  // Reset photo state when the portal opens
-  window._extPortalPhotos = [];
-}
-
-// Public portal photo buffer + handler
-function epAddPhotos(input){
-  const files = [...(input.files||[])];
-  window._extPortalPhotos = window._extPortalPhotos || [];
-  files.forEach(file=>{
-    // Skip anything too large (>10MB raw) to protect against accidental video uploads
-    if(file.size > 10*1024*1024){
-      const errEl=document.getElementById('ep_err');
-      if(errEl) errEl.textContent='⚠️ "'+file.name+'" is over 10MB — please choose a smaller file';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async e => {
-      // Compress to keep DB rows manageable and uploads fast on slow site wifi
-      let data = e.target.result;
-      try { data = await compressImage(data, 1400, 0.8); } catch(_){}
-      window._extPortalPhotos.push({name:file.name, data});
-      epRenderPhotoGrid();
-    };
-    reader.readAsDataURL(file);
-  });
-  input.value = '';
-}
-
-function epRenderPhotoGrid(){
-  const grid = document.getElementById('ep_photo_grid');
-  if(!grid) return;
-  const photos = window._extPortalPhotos || [];
-  grid.innerHTML = photos.map((p,i)=>`
-    <div style="position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;border:1px solid #2a2e38">
-      <img src="${p.data}" style="width:100%;height:100%;object-fit:cover" alt="">
-      <button onclick="window._extPortalPhotos.splice(${i},1);epRenderPhotoGrid()"
-        style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;padding:0">×</button>
-    </div>`).join('');
 }
 
 function epTypeChange(){
@@ -4880,29 +4427,6 @@ function epTypeChange(){
 
 async function submitExtNcrPortal(){
   const err = document.getElementById('ep_err');
-
-  // Honeypot — real users never see the #ep_website input.
-  // Bots that auto-fill every field do, so a value here means it's spam.
-  const hp = document.getElementById('ep_website');
-  if(hp && hp.value){
-    err.textContent='⚠️ Submission blocked.';
-    return;
-  }
-
-  // Soft rate-limit per browser — stops accidental double-submits and casual abuse.
-  // Server-side rate limiting should still be added in a Netlify edge function.
-  try{
-    const RL_KEY='ncr_portal_submits';
-    const now=Date.now();
-    const recent=JSON.parse(localStorage.getItem(RL_KEY)||'[]').filter(t=>now-t<60*60*1000);
-    if(recent.length>=5){
-      err.textContent='⚠️ Too many submissions in the last hour. If this is urgent please call us directly.';
-      return;
-    }
-    recent.push(now);
-    localStorage.setItem(RL_KEY, JSON.stringify(recent));
-  }catch(_){}
-
   const _rawCompP=document.getElementById('ep_company').value.trim();
   const _matchP=findClosestCustomer(_rawCompP);
   const company=(_matchP&&_matchP.score<0.25)?_matchP.match:titleCase(_rawCompP);
@@ -4943,42 +4467,18 @@ async function submitExtNcrPortal(){
     source:'external_portal'
   };
 
-  // Submit through the rate-limited Netlify function. Falls back to a
-  // direct Supabase POST only if the function isn't deployed yet — this
-  // makes the deploy step non-blocking.
-  const honeypotVal = (document.getElementById('ep_website')||{}).value || '';
+  // Save to Supabase directly (no auth needed — anon key allows insert)
   try{
-    const r = await fetch('/.netlify/functions/submit-public-ncr',{
+    const r = await fetch(SURL+'/rest/v1/ncr_records',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ ncr: rec, website: honeypotVal })
+      headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify(rec)
     });
-    if(r.status === 429){
-      // Server rate-limit hit. Read the retry-after for a friendlier message.
-      let retrySec = 0;
-      try{ const j=await r.json(); retrySec=j.retryAfterSec||0; }catch(_){}
-      const mins = Math.max(1, Math.ceil(retrySec/60));
-      err.textContent = `⚠️ Too many submissions from your network. Please try again in ${mins} minute${mins===1?'':'s'} — or call us directly if this is urgent.`;
-      if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
-      return;
-    }
-    if(r.status === 404){
-      // Function not deployed yet — fall back to direct Supabase insert.
-      // (Honeypot + client rate-limit already checked above.)
-      const fb = await fetch(SURL+'/rest/v1/ncr_records',{
-        method:'POST',
-        headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-        body:JSON.stringify(rec)
-      });
-      if(!fb.ok){
-        err.textContent='⚠️ Submission failed — please try again or call us directly';
-        if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
-        return;
-      }
-    } else if(!r.ok){
+    if(!r.ok){
+      const t=await r.text();
       err.textContent='⚠️ Submission failed — please try again or call us directly';
       if(btn){btn.disabled=false;btn.textContent='Submit NCR →';}
-      console.error(await r.text());
+      console.error(t);
       return;
     }
   }catch(e){
@@ -4993,14 +4493,6 @@ async function submitExtNcrPortal(){
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({type:'submission',ncr:rec,customer_email:rec.customer_email||null})
   }).catch(()=>{});
-
-  // Persist any photos the customer attached — fire and forget so they
-  // don't block the confirmation screen on slow connections.
-  if(window._extPortalPhotos && window._extPortalPhotos.length){
-    const photosToSave = window._extPortalPhotos.slice();
-    window._extPortalPhotos = [];
-    saveNcrPhotos(id, photosToSave, name).catch(()=>{});
-  }
   document.getElementById('extNcrPortalWrap').innerHTML=`
   <div style="min-height:100vh;background:#0d0f12;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:20px">
     <div style="background:#161920;border:1px solid #2a2e38;border-radius:16px;padding:32px;text-align:center;max-width:400px;width:100%">
@@ -5563,7 +5055,40 @@ function exportCustomerReport(){
 // ═══════════════════════════════════════════════════════════════
 // EXTERNAL NCR FORM
 // ═══════════════════════════════════════════════════════════════
+// ── External NCR pending attachments ─────────────────────────
+let _extNcrPendingFiles = [];
+
+function handleExtNcrDrop(event){
+  const files=[...(event.dataTransfer?.files||[])];
+  if(!files.length) return;
+  _extNcrPendingFiles.push(...files);
+  renderExtNcrFileList();
+}
+
+function handleExtNcrFiles(event){
+  const files=[...(event.target.files||[])];
+  if(!files.length) return;
+  _extNcrPendingFiles.push(...files);
+  renderExtNcrFileList();
+  event.target.value='';
+}
+
+function renderExtNcrFileList(){
+  const el=document.getElementById('extNcrFileList');
+  if(!el) return;
+  if(!_extNcrPendingFiles.length){el.innerHTML='';return;}
+  el.innerHTML=_extNcrPendingFiles.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:4px;margin-top:4px;font-size:11px;font-family:var(--mono)">
+      <span style="color:var(--accent)">${f.type.startsWith('image/')?'🖼':'📎'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${f.name}</span>
+      <span style="color:var(--muted)">${Math.round(f.size/1024)}KB</span>
+      <span onclick="_extNcrPendingFiles.splice(${i},1);renderExtNcrFileList()" style="cursor:pointer;color:var(--red);font-size:13px;padding:0 2px">×</span>
+    </div>`).join('');
+}
+
 function openExtNcrModal(){
+  _extNcrPendingFiles=[];
+  renderExtNcrFileList();
   const now=new Date();
   const local=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   document.getElementById('extNcrDatetime').value=local;
@@ -5623,6 +5148,13 @@ async function submitExtNcr(){
   await sbUps('ncr_records',newNCR).catch(()=>{});
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
   sendNcrAlertEmail(newNCR);
+
+  // Upload any pending attachments
+  if(_extNcrPendingFiles.length){
+    uploadAttachments(_extNcrPendingFiles, id).catch(()=>{});
+    _extNcrPendingFiles=[];
+  }
+
   closeModal('extNcrModal');
   showToast(`✓ External NCR submitted — ${id}`);
   renderTable('all');renderTable('external');renderDashboard();updateBadges();
@@ -6116,43 +5648,6 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 function fmtDate(d){if(!d||d==='None')return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}catch{return d;}}
 function statusCls(s){return s==='open'?'b-open':s==='closed'?'b-closed':'b-progress';}
 function statusBadge(s){const labels={open:'Open',closed:'Closed',inprogress:'In Progress'};return`<span class="badge ${statusCls(s)}">${labels[s]||s||'Open'}</span>`;}
-
-// Click handler for collapsible detail cards. The header is the clickable
-// element; the body is the immediately-following .collapsible-body div.
-function toggleCollapsible(headerEl){
-  const card = headerEl.closest('.collapsible-card');
-  if(!card) return;
-  const body = card.querySelector('.collapsible-body');
-  const chev = card.querySelector('.collapsible-chev');
-  if(!body) return;
-  const isOpen = body.style.display !== 'none';
-  body.style.display = isOpen ? 'none' : 'block';
-  if(chev) chev.textContent = isOpen ? '▸' : '▾';
-}
-
-// Tiny visual indicator for severity. Designed to sit inline before issue text without taking a column.
-function severityDot(sev){
-  if(!sev) return '';
-  const map = {
-    'Minor':    {color:'#22c55e', title:'Minor — cosmetic / non-functional'},
-    'Major':    {color:'#f59e0b', title:'Major — affects fit / function but not safety'},
-    'Critical': {color:'#ef4444', title:'Critical — must be remade or rejected'},
-    'Safety':   {color:'#9333ea', title:'Safety — fire rating / structural / regulatory'}
-  };
-  const m = map[sev]; if(!m) return '';
-  return `<span title="${m.title}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${m.color};margin-right:6px;vertical-align:middle"></span>`;
-}
-function severityBadge(sev){
-  if(!sev) return '';
-  const map={
-    'Minor':    {bg:'rgba(34,197,94,.15)',  fg:'#22c55e', icon:'🟢'},
-    'Major':    {bg:'rgba(245,158,11,.15)', fg:'#f59e0b', icon:'🟠'},
-    'Critical': {bg:'rgba(239,68,68,.15)',  fg:'#ef4444', icon:'🔴'},
-    'Safety':   {bg:'rgba(147,51,234,.15)', fg:'#9333ea', icon:'⚠️'}
-  };
-  const m=map[sev]; if(!m) return `<span class="badge">${esc(sev)}</span>`;
-  return `<span class="badge" style="background:${m.bg};color:${m.fg}">${m.icon} ${sev}</span>`;
-}
 function openModal(id){document.getElementById(id).classList.remove('hidden');}
 function closeModal(id){document.getElementById(id).classList.add('hidden');}
 function closeRaiseModal(){closeModal('raiseModal');}
@@ -6196,6 +5691,7 @@ async function loadSettingsFromDB(){
 
 async function saveSettings(){
   const s={
+    anthropic_key:document.getElementById('ejs_anthropic_key').value.trim(),
     ejs_service:document.getElementById('ejs_service').value.trim(),
     ejs_template:document.getElementById('ejs_template').value.trim(),
     ejs_pubkey:document.getElementById('ejs_pubkey').value.trim(),
@@ -6234,7 +5730,7 @@ async function saveSettings(){
 }
 function populateSettings(){
   const s=loadSettings();
-  ['ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','customer_report_cc','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
+  ['ejs_anthropic_key','ejs_service','ejs_template','ejs_pubkey','email_remake','email_rework','email_return','email_credit','email_inspect','portal_url','picker_email','notify_email','customer_report_cc','stock_report_email','rft_report_email','weekly_report_email','sla_external','sla_contact','sla_redtag'].forEach(k=>{
     const el=document.getElementById(k);if(el&&s[k]) el.value=s[k];
   });
 }
@@ -6883,150 +6379,7 @@ async function populateAssignedTo(){
 // NCR COMMENTS / THREAD
 // ═══════════════════════════════════════════════════════════════
 async function loadComments(ncrId){
-  // Filter out soft-deleted rows. Restoration view uses loadDeletedComments.
-  try{
-    return await sbGet('ncr_comments', `ncr_id=eq.${encodeURIComponent(ncrId)}&deleted_at=is.null&order=created_at.asc`);
-  }catch(e){
-    console.warn('loadComments failed:', e.message);
-    return [];
-  }
-}
-
-async function loadDeletedComments(ncrId){
-  // Recovery view — only used when user clicks 'Show N deleted'.
-  try{
-    return await sbGet('ncr_comments', `ncr_id=eq.${encodeURIComponent(ncrId)}&deleted_at=not.is.null&order=deleted_at.desc`);
-  }catch(e){
-    console.warn('loadDeletedComments failed:', e.message);
-    return [];
-  }
-}
-
-// Soft-delete a comment. The row stays in the database; a deleted_at
-// timestamp plus the user's name are written, and loadComments hides
-// it from view. Undo toast appears for 5 s for immediate recovery; the
-// 'Show deleted' toggle on the Comments card recovers older ones any
-// time after that.
-async function deleteComment(commentId, currentNcrId){
-  if(!commentId) return;
-  const confirmDel = window.confirm('Delete this comment?\n\nYou can restore it any time from "Show deleted" at the bottom of the Comments section.');
-  if(!confirmDel) return;
-
-  // Remove from DOM immediately for snappy feel
-  const el = document.querySelector(`[data-comment-id="${commentId}"]`);
-  if(el) el.remove();
-
-  // Persist soft-delete to Supabase
-  try{
-    await sbPatch('ncr_comments', commentId, {
-      deleted_at: new Date().toISOString(),
-      deleted_by: currentUser?.name || currentUser?.email || 'Unknown'
-    });
-  }catch(e){
-    showToast('⚠️ Could not delete: ' + (e.message||'unknown error'));
-    // Reload so the deleted-from-DOM element comes back
-    renderComments(currentNcrId);
-    return;
-  }
-
-  // Refresh deleted-count badge if 'Show deleted' is in DOM
-  updateDeletedCommentsBadge(currentNcrId);
-
-  // Show undo toast with a real Undo button (window.confirm doesn't do that)
-  showUndoToast('Comment deleted', async ()=>{
-    try{
-      await sbPatch('ncr_comments', commentId, {
-        deleted_at: null, deleted_by: null
-      });
-      showToast('✓ Comment restored');
-      renderComments(currentNcrId);
-    }catch(e){ showToast('⚠️ Could not restore: '+e.message); }
-  });
-}
-
-// Restore a soft-deleted comment (called from the 'Show deleted' panel)
-async function restoreComment(commentId, currentNcrId){
-  try{
-    await sbPatch('ncr_comments', commentId, {
-      deleted_at: null, deleted_by: null
-    });
-    showToast('✓ Comment restored');
-    renderComments(currentNcrId);
-  }catch(e){
-    showToast('⚠️ Could not restore: '+e.message);
-  }
-}
-
-// Toggle the 'Show N deleted comments' panel under the comments list
-async function toggleDeletedComments(ncrId){
-  const panel = document.getElementById('deletedCommentsPanel');
-  if(!panel) return;
-  if(panel.style.display === 'block'){
-    panel.style.display = 'none';
-    const btn = document.getElementById('deletedCommentsToggle');
-    if(btn) btn.dataset.open = '0';
-    return;
-  }
-  panel.style.display = 'block';
-  const btn = document.getElementById('deletedCommentsToggle');
-  if(btn) btn.dataset.open = '1';
-  panel.innerHTML = '<div style="color:var(--muted);font-size:11px;font-family:var(--mono);padding:6px 0">Loading…</div>';
-  const rows = await loadDeletedComments(ncrId);
-  if(!rows.length){
-    panel.innerHTML = '<div style="color:var(--faint);font-size:11px;font-family:var(--mono);padding:6px 0">No deleted comments.</div>';
-    return;
-  }
-  panel.innerHTML = rows.map(c => `
-    <div style="padding:8px 10px;background:rgba(239,68,68,.05);border-left:2px solid rgba(239,68,68,.4);border-radius:var(--r);margin-bottom:6px;opacity:.85">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
-        <span style="font-size:11px;font-weight:600;color:#fca5a5">${esc(c.author)}</span>
-        <span style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Deleted by ${esc(c.deleted_by||'?')} · ${new Date(c.deleted_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
-          <button onclick="restoreComment('${c.id}','${ncrId}')"
-            style="background:none;border:1px solid var(--green);color:var(--green);border-radius:var(--r);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer">Restore</button>
-        </span>
-      </div>
-      <div style="font-size:12px;color:var(--muted);line-height:1.4;text-decoration:line-through">${esc(c.text)}</div>
-    </div>`).join('');
-}
-
-// Keep the 'Show N deleted' badge in sync with the actual count
-async function updateDeletedCommentsBadge(ncrId){
-  const btn = document.getElementById('deletedCommentsToggle');
-  if(!btn) return;
-  const rows = await loadDeletedComments(ncrId);
-  if(!rows.length){ btn.style.display='none'; return; }
-  btn.style.display='inline-flex';
-  btn.querySelector('[data-count]').textContent = rows.length;
-  // If the panel is currently open, refresh its contents too
-  if(btn.dataset.open === '1'){
-    const panel = document.getElementById('deletedCommentsPanel');
-    if(panel) toggleDeletedComments(ncrId);
-  }
-}
-
-// Toast with an Undo button. Persists ~6 s; clicking Undo invokes the
-// passed callback. Uses the existing toast container if present, else
-// creates a one-off element.
-function showUndoToast(message, onUndo){
-  // Remove any existing undo toast to avoid stacking
-  document.querySelectorAll('[data-undo-toast]').forEach(n=>n.remove());
-
-  const t = document.createElement('div');
-  t.setAttribute('data-undo-toast','1');
-  t.style.cssText = 'position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#1a1d24;color:#e8eaf0;border:1px solid #2a2e38;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:14px;z-index:10000;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:13px;animation:fade-in .2s';
-  t.innerHTML = '<span></span><button style="background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:6px;padding:4px 10px;font-size:11px;font-family:monospace;cursor:pointer;font-weight:600">UNDO</button>';
-  t.querySelector('span').textContent = message;
-  const btn = t.querySelector('button');
-  let invoked = false;
-  btn.onclick = async () => {
-    if(invoked) return;
-    invoked = true;
-    t.remove();
-    try{ await onUndo(); }catch(_){}
-  };
-  document.body.appendChild(t);
-  setTimeout(()=>{ if(!invoked) t.remove(); }, 6000);
+  return await sbGet(`ncr_comments?ncr_id=eq.${encodeURIComponent(ncrId)}&order=created_at.asc`).catch(()=>[]);
 }
 
 async function addComment(ncrId){
@@ -7045,39 +6398,15 @@ async function addComment(ncrId){
     const noMsg=wrap.querySelector('[data-no-comments]');
     if(noMsg) noMsg.remove();
     const div=document.createElement('div');
-    div.dataset.commentId = comment.id;
-    div.dataset.pending = '1';
     div.style.cssText='padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)';
-    div.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px">'
+    div.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
       +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(comment.author)+'</span>'
-      +'<span style="display:flex;align-items:center;gap:8px">'
-      +  '<span data-meta="1" style="font-size:10px;color:var(--muted);font-family:var(--mono)">Just now · saving…</span>'
-      +  '<button onclick="deleteComment(\''+comment.id+'\',\''+ncrId+'\')" title="Delete comment (recoverable)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;opacity:.6">✕</button>'
-      +'</span></div>'
+      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Just now</span></div>'
       +'<div style="font-size:13px;line-height:1.5">'+esc(text)+'</div>';
     wrap.appendChild(div);
     wrap.scrollTop=wrap.scrollHeight;
-
-    // Save to Supabase — and surface ANY failure visibly. Silent .catch was
-    // letting users believe comments persisted when they didn't.
-    try{
-      await sbUps('ncr_comments', comment);
-      // Confirm in the DOM so the user knows it persisted
-      const meta = div.querySelector('[data-meta]');
-      if(meta) meta.textContent = 'Just now';
-      div.dataset.pending = '0';
-    }catch(e){
-      div.style.borderLeftColor = 'var(--red)';
-      div.style.background = 'rgba(239,68,68,.08)';
-      const meta = div.querySelector('[data-meta]');
-      if(meta){
-        meta.style.color = 'var(--red)';
-        meta.textContent = '⚠️ Did NOT save — refresh and it will be lost';
-      }
-      showToast('⚠️ Comment did not save: ' + (e.message||'unknown error'));
-      console.error('Comment save error:', e);
-    }
   }
+  sbUps('ncr_comments',comment).catch(e=>console.warn('Comment save:',e.message));
   if(btn){btn.disabled=false;btn.textContent='Post';}
 }
 
@@ -7089,149 +6418,16 @@ async function renderComments(ncrId){
     const comments=await loadComments(ncrId)||[];
     if(!comments.length){
       wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet — add one below.</div>';
-    } else {
-      wrap.innerHTML=comments.map(c=>'<div data-comment-id="'+esc(c.id)+'" style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(c.author)+'</span>'
-        +'<span style="display:flex;align-items:center;gap:8px">'
-        +  '<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span>'
-        +  '<button onclick="deleteComment(\''+c.id+'\',\''+ncrId+'\')" title="Delete comment (recoverable)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;opacity:.6">✕</button>'
-        +'</span></div>'
-        +'<div style="font-size:13px;line-height:1.5">'+esc(c.text)+'</div></div>').join('');
+      return;
     }
-    // Refresh the 'Show N deleted comments' toggle below the list
-    updateDeletedCommentsBadge(ncrId);
+    wrap.innerHTML=comments.map(c=>'<div style="padding:10px;background:var(--surface);border-radius:var(--r);margin-bottom:6px;border-left:2px solid var(--accent)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+      +'<span style="font-size:12px;font-weight:600;color:var(--accent)">'+esc(c.author)+'</span>'
+      +'<span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>'
+      +'<div style="font-size:13px;line-height:1.5">'+esc(c.text)+'</div></div>').join('');
   }catch(e){
-    wrap.innerHTML='<div style="padding:10px;background:rgba(239,68,68,.08);border-left:2px solid var(--red);border-radius:var(--r);font-size:12px;font-family:var(--mono);color:var(--red)">⚠️ Could not load comments: '+esc(e.message||'unknown')+'</div>';
-    console.error('renderComments error:',e);
+    wrap.innerHTML='<div style="color:var(--faint);font-size:12px;font-family:var(--mono);padding:8px 0" data-no-comments>No comments yet.</div>';
   }
-}
-
-// Self-test for the comments save/load round-trip. Returns a human-readable
-// log of each step so we can diagnose the persistence issue without console
-// access. Wired to a button on the Comments card header.
-async function diagnoseComments(ncrId){
-  const log = [];
-  const push = (icon, msg) => log.push(`${icon} ${msg}`);
-  const testId = 'diag_'+Date.now();
-  let testCommentExisted = false;
-
-  push('🔧', 'Starting diagnostic for NCR ' + ncrId);
-  push('🔧', 'Supabase URL: ' + (typeof SURL === 'string' ? SURL.replace(/^https?:\/\//,'').slice(0,30)+'…' : '(missing)'));
-  push('🔧', 'Anon key present: ' + (typeof SKEY === 'string' && SKEY.length > 20 ? 'yes' : 'NO'));
-
-  // Step 1: Does the table exist? Try a SELECT with limit 1.
-  push('→', 'Step 1: checking ncr_comments table exists…');
-  try{
-    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=*&limit=1`, {headers: SH});
-    if(r.status === 404){
-      push('❌', 'Step 1 FAILED: HTTP 404 — table "ncr_comments" does not exist');
-      return log.join('\n');
-    }
-    if(!r.ok){
-      const body = await r.text();
-      push('❌', `Step 1 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
-      return log.join('\n');
-    }
-    const rows = await r.json();
-    push('✓', `Step 1 OK: table exists, contains at least one queryable row (got ${rows.length})`);
-  }catch(e){
-    push('❌', 'Step 1 FAILED: network error — ' + e.message);
-    return log.join('\n');
-  }
-
-  // Step 2: Count rows for THIS NCR
-  push('→', 'Step 2: counting existing comments for this NCR…');
-  try{
-    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=id&ncr_id=eq.${encodeURIComponent(ncrId)}`, {headers: SH});
-    if(!r.ok){
-      const body = await r.text();
-      push('❌', `Step 2 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
-      push('⚠️', 'This likely means SELECT is being blocked by an RLS policy on ncr_comments');
-    }else{
-      const rows = await r.json();
-      push('✓', `Step 2 OK: ${rows.length} comment row(s) exist in DB for this NCR`);
-      if(rows.length > 0) push('💡', 'Comments ARE saved. The bug is in loading — not saving.');
-    }
-  }catch(e){
-    push('❌', 'Step 2 FAILED: ' + e.message);
-  }
-
-  // Step 3: Try to write a test comment
-  push('→', 'Step 3: writing a test comment…');
-  const testRow = {
-    id: testId, ncr_id: ncrId,
-    text: '[diagnostic test — safe to delete]',
-    author: 'Diagnostic',
-    created_at: new Date().toISOString()
-  };
-  try{
-    const r = await fetch(`${SURL}/rest/v1/ncr_comments`, {
-      method:'POST',
-      headers: {...SH, 'Prefer':'return=representation'},
-      body: JSON.stringify(testRow)
-    });
-    if(!r.ok){
-      const body = await r.text();
-      push('❌', `Step 3 FAILED: HTTP ${r.status} — ${body.slice(0,300)}`);
-      push('⚠️', 'Common causes: RLS blocking INSERT for anon, missing column, type mismatch');
-      return log.join('\n');
-    }
-    push('✓', 'Step 3 OK: test comment written successfully');
-    testCommentExisted = true;
-  }catch(e){
-    push('❌', 'Step 3 FAILED: ' + e.message);
-    return log.join('\n');
-  }
-
-  // Step 4: Read it back
-  push('→', 'Step 4: reading the test comment back…');
-  try{
-    const r = await fetch(`${SURL}/rest/v1/ncr_comments?select=*&id=eq.${testId}`, {headers: SH});
-    if(!r.ok){
-      const body = await r.text();
-      push('❌', `Step 4 FAILED: HTTP ${r.status} — ${body.slice(0,200)}`);
-    }else{
-      const rows = await r.json();
-      if(rows.length){
-        push('✓', 'Step 4 OK: test comment read back successfully');
-        push('💡', 'Save and load BOTH work for the diagnostic — comments should persist.');
-      }else{
-        push('❌', 'Step 4 ANOMALY: row was written but cannot be read — RLS likely blocks SELECT for anon');
-      }
-    }
-  }catch(e){
-    push('❌', 'Step 4 FAILED: ' + e.message);
-  }
-
-  // Step 5: Test the actual loadComments function (the same code the app uses)
-  push('→', 'Step 5: testing the app\'s loadComments() function…');
-  try{
-    const rows = await loadComments(ncrId);
-    push('✓', `Step 5 OK: loadComments returned ${rows.length} row(s)`);
-    if(rows.length === 0) push('⚠️', 'loadComments returned empty even though step 2 saw rows — there\'s a query bug');
-  }catch(e){
-    push('❌', 'Step 5 FAILED: ' + e.message);
-  }
-
-  // Cleanup
-  if(testCommentExisted){
-    push('→', 'Cleaning up test comment…');
-    try{
-      await fetch(`${SURL}/rest/v1/ncr_comments?id=eq.${testId}`, {method:'DELETE', headers: SH});
-      push('✓', 'Cleanup done');
-    }catch(_){ push('⚠️', 'Cleanup failed — you may need to delete the diagnostic row manually'); }
-  }
-
-  return log.join('\n');
-}
-
-async function runCommentsDiagnostic(ncrId){
-  const out = document.getElementById('commentsDiagOutput');
-  if(out){ out.style.display='block'; out.textContent = 'Running diagnostic…\n'; }
-  const result = await diagnoseComments(ncrId);
-  if(out){ out.textContent = result; }
-  console.log(result);
 }
 // ═══════════════════════════════════════════════════════════════
 function openContactedModal(ncrId){
@@ -8025,16 +7221,10 @@ function openEditNcr(id){
   document.getElementById('editIssue').value = r.issue||'';
   document.getElementById('editRootCause').value = r.root_cause||'';
   document.getElementById('editCorrective').value = r.corrective||'';
-  document.getElementById('editPreventive').value = r.preventive_action||'';
-  document.getElementById('editEffDue').value = r.effectiveness_review_due||'';
-  document.getElementById('editEffDate').value = r.effectiveness_review_date||'';
-  document.getElementById('editEffOutcome').value = r.effectiveness_review_outcome||'';
-  document.getElementById('editEffNotes').value = r.effectiveness_review_notes||'';
   document.getElementById('editCategory').value = r.category||'';
   document.getElementById('editDept').value = r.dept||'';
   document.getElementById('editNcrType').value = r.ncr_type||'Door';
   document.getElementById('editErrorType').value = r.error_type||'';
-  document.getElementById('editSeverity').value = r.severity||'';
   document.getElementById('editDoorRef').value = r.door_ref||'';
   document.getElementById('editDoorType').value = r.door_type||'';
   document.getElementById('editUnits').value = r.units||'';
@@ -8058,17 +7248,10 @@ async function saveNcrEdit(){
     issue:        document.getElementById('editIssue').value.trim(),
     root_cause:   document.getElementById('editRootCause').value.trim(),
     corrective:   document.getElementById('editCorrective').value.trim(),
-    preventive_action: document.getElementById('editPreventive').value.trim(),
-    effectiveness_review_due:  document.getElementById('editEffDue').value||null,
-    effectiveness_review_date: document.getElementById('editEffDate').value||null,
-    effectiveness_review_outcome: document.getElementById('editEffOutcome').value||null,
-    effectiveness_review_notes: document.getElementById('editEffNotes').value.trim(),
-    effectiveness_review_by: document.getElementById('editEffOutcome').value ? (currentUser?.name||null) : null,
     category:     document.getElementById('editCategory').value.trim(),
     dept:         document.getElementById('editDept').value.trim(),
     ncr_type:     document.getElementById('editNcrType').value||'Door',
     error_type:   document.getElementById('editErrorType').value||null,
-    severity:     document.getElementById('editSeverity').value||null,
     door_ref:     document.getElementById('editDoorRef').value.trim(),
     door_type:    document.getElementById('editDoorType').value.trim(),
     units:        parseFloat(document.getElementById('editUnits').value)||0,
@@ -8207,20 +7390,6 @@ async function runRCA(ncrId, autoRun=false){
     r.date && r.date >= new Date(Date.now()-90*86400000).toISOString().slice(0,10)
   ).slice(0,5).map(r=>({date:r.date,issue:r.issue}));
 
-  // Fetch past team-approved or corrected RCAs for similar NCRs — these get
-  // injected as few-shot examples so the AI learns your team's style.
-  const examples = (await fetchRcaExamples(ncr).catch(()=>[])).map(e=>({
-    issue: e.ncr_issue,
-    category: e.ncr_category,
-    dept: e.ncr_dept,
-    verdict: e.verdict,
-    // For corrected examples, prefer the team's version. For approved, use the AI's.
-    root_cause: e.verdict==='corrected' ? (e.team_root_cause||e.ai_root_cause) : e.ai_root_cause,
-    corrective_action: e.verdict==='corrected' ? (e.team_corrective_action||e.ai_corrective_action) : e.ai_corrective_action,
-    preventive_action: e.verdict==='corrected' ? (e.team_preventive_action||e.ai_preventive_action) : e.ai_preventive_action,
-    team_notes: e.team_notes||null
-  }));
-
   // Load comments to include in analysis context
   const comments = await loadComments(ncrId).catch(()=>[]);
   const commentText = comments.length ? comments.map(c=>`${c.author}: ${c.text}`).join('\n') : null;
@@ -8237,8 +7406,7 @@ async function runRCA(ncrId, autoRun=false){
         },
         method: _rcaMethod,
         history: similar,
-        comments: commentText,
-        examples
+        comments: commentText
       })
     });
 
@@ -8259,14 +7427,6 @@ async function runRCA(ncrId, autoRun=false){
 function renderRcaResult(r, ncrId){
   const outputEl = document.getElementById('rcaOutput');
   if(!outputEl) return;
-
-  // Stash on a global so the action buttons don't have to round-trip
-  // the full JSON through their onclick attributes. encodeURIComponent
-  // preserves apostrophes which would terminate a single-quoted onclick
-  // argument early — that bug broke every button when the AI's text
-  // contained any apostrophe.
-  window._lastRcaResult = r;
-  window._lastRcaNcrId  = ncrId;
 
   let html = '';
 
@@ -8336,181 +7496,13 @@ function renderRcaResult(r, ncrId){
   // Save + accept buttons
   html += `
     <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="top-btn primary" style="flex:1;justify-content:center" onclick="saveRcaToNcr()">
+      <button class="top-btn primary" style="flex:1;justify-content:center" onclick="saveRcaToNcr('${ncrId}','${encodeURIComponent(JSON.stringify(r))}')">
         💾 Save root cause to NCR
       </button>
       <button class="top-btn ghost" onclick="document.getElementById('rcaOutput').innerHTML=''">Clear</button>
-    </div>
-
-    <!-- AI learning feedback — every approval/correction makes future RCAs better -->
-    <div style="margin-top:14px;padding:12px;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.25);border-radius:var(--r)">
-      <div style="font-size:10px;font-family:var(--mono);color:#a78bfa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🧠 Help the AI learn from this</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px">Your feedback teaches the AI to give better RCAs for similar future NCRs. Past approved and corrected findings get included as examples in future prompts.</div>
-      <div id="rcaFeedbackButtons" style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(34,197,94,.5);color:#4ade80" onclick="submitRcaFeedback('approved')">
-          👍 Looks right
-        </button>
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(245,158,11,.5);color:#fbbf24" onclick="openRcaRefine()">
-          ✏️ Refine
-        </button>
-        <button class="top-btn ghost" style="flex:1;min-width:110px;justify-content:center;border-color:rgba(239,68,68,.4);color:#f87171" onclick="submitRcaFeedback('rejected')">
-          👎 Off the mark
-        </button>
-      </div>
-      <div id="rcaFeedbackStatus" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-top:8px;min-height:14px"></div>
     </div>`;
 
   outputEl.innerHTML = html;
-}
-
-// ── RCA learning loop ──────────────────────────────────────────
-// Store team feedback on each AI-generated RCA so future analyses can
-// use approved / corrected examples as in-prompt guidance.
-
-async function submitRcaFeedback(verdict){
-  const ncrId  = window._lastRcaNcrId;
-  const aiData = window._lastRcaResult || {};
-  if(!ncrId){ showToast('⚠️ Run an RCA first'); return; }
-  const ncr = ncrRecords.find(r=>r.id===ncrId);
-  if(!ncr){ showToast('⚠️ NCR not found'); return; }
-
-  const statusEl = document.getElementById('rcaFeedbackStatus');
-  const btnWrap  = document.getElementById('rcaFeedbackButtons');
-  if(btnWrap) btnWrap.style.opacity = '0.4';
-  if(statusEl) statusEl.textContent = '💾 Saving feedback…';
-
-  const row = {
-    id: 'rcafb_'+Date.now(),
-    ncr_id: ncrId,
-    method: _rcaMethod || '5whys',
-    ncr_category: ncr.category || null,
-    ncr_error_type: ncr.error_type || null,
-    ncr_dept: ncr.dept || null,
-    ncr_issue: ncr.issue || null,
-    ncr_door_type: ncr.door_type || null,
-    ai_root_cause: aiData.root_cause || null,
-    ai_corrective_action: aiData.corrective_action || null,
-    ai_preventive_action: aiData.preventive_action || null,
-    ai_full_output: aiData,
-    verdict,                       // 'approved' | 'rejected'
-    team_root_cause: null,
-    team_corrective_action: null,
-    team_preventive_action: null,
-    team_notes: null,
-    created_at: new Date().toISOString(),
-    created_by: currentUser?.name || currentUser?.email || 'Unknown'
-  };
-
-  try{
-    await sbUps('ncr_rca_feedback', row);
-    if(statusEl){
-      statusEl.style.color = 'var(--green)';
-      statusEl.textContent = verdict==='approved'
-        ? '✓ Saved — future RCAs on similar NCRs will reference this one'
-        : '✓ Saved — AI will avoid this pattern next time';
-    }
-  }catch(e){
-    if(btnWrap) btnWrap.style.opacity = '';
-    if(statusEl){ statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Couldn\'t save feedback: '+e.message; }
-  }
-}
-
-function openRcaRefine(){
-  const aiData = window._lastRcaResult || {};
-  const ncrId  = window._lastRcaNcrId;
-  if(!ncrId){ showToast('⚠️ Run an RCA first'); return; }
-  document.getElementById('rcaRefineNcrId').value = ncrId;
-  // Pre-fill with the AI's suggestion so users edit rather than retype
-  document.getElementById('rcaRefineRoot').value = aiData.root_cause || '';
-  document.getElementById('rcaRefineCorrective').value = aiData.corrective_action || '';
-  document.getElementById('rcaRefinePreventive').value = aiData.preventive_action || '';
-  document.getElementById('rcaRefineNotes').value = '';
-  document.getElementById('rcaRefineErr').textContent = '';
-  openModal('rcaRefineModal');
-}
-
-async function saveRcaRefinement(){
-  const ncrId = document.getElementById('rcaRefineNcrId').value;
-  const teamRoot       = document.getElementById('rcaRefineRoot').value.trim();
-  const teamCorrective = document.getElementById('rcaRefineCorrective').value.trim();
-  const teamPreventive = document.getElementById('rcaRefinePreventive').value.trim();
-  const teamNotes      = document.getElementById('rcaRefineNotes').value.trim();
-  const errEl = document.getElementById('rcaRefineErr');
-
-  if(!teamRoot){ errEl.textContent='⚠️ Root cause is required'; return; }
-
-  const ncr = ncrRecords.find(r=>r.id===ncrId);
-  if(!ncr){ errEl.textContent='⚠️ NCR not found'; return; }
-
-  const aiData = window._lastRcaResult || {};
-
-  const row = {
-    id: 'rcafb_'+Date.now(),
-    ncr_id: ncrId,
-    method: _rcaMethod || '5whys',
-    ncr_category: ncr.category || null,
-    ncr_error_type: ncr.error_type || null,
-    ncr_dept: ncr.dept || null,
-    ncr_issue: ncr.issue || null,
-    ncr_door_type: ncr.door_type || null,
-    ai_root_cause: aiData.root_cause || null,
-    ai_corrective_action: aiData.corrective_action || null,
-    ai_preventive_action: aiData.preventive_action || null,
-    ai_full_output: aiData,
-    verdict: 'corrected',
-    team_root_cause: teamRoot,
-    team_corrective_action: teamCorrective || null,
-    team_preventive_action: teamPreventive || null,
-    team_notes: teamNotes || null,
-    created_at: new Date().toISOString(),
-    created_by: currentUser?.name || currentUser?.email || 'Unknown'
-  };
-
-  try{
-    await sbUps('ncr_rca_feedback', row);
-    closeModal('rcaRefineModal');
-    const statusEl = document.getElementById('rcaFeedbackStatus');
-    const btnWrap  = document.getElementById('rcaFeedbackButtons');
-    if(btnWrap) btnWrap.style.opacity = '0.4';
-    if(statusEl){
-      statusEl.style.color = 'var(--green)';
-      statusEl.textContent = '✓ Your refinement saved — the AI will use this as guidance for similar NCRs';
-    }
-    showToast('✓ Refinement saved — AI will learn from this');
-  }catch(e){
-    errEl.textContent='⚠️ Couldn\'t save: '+e.message;
-  }
-}
-
-// Fetch up to 5 relevant past feedback rows to use as few-shot examples in the
-// next RCA call. Similarity is judged by category, then error_type, then dept.
-// Only approved or corrected examples count — rejected ones are skipped.
-async function fetchRcaExamples(ncr){
-  const cat = ncr.category || '';
-  const errt = ncr.error_type || '';
-  const dept = ncr.dept || '';
-  // Try category first (highest signal), then fall back to broader filters
-  const queries = [
-    cat ? `ncr_category=eq.${encodeURIComponent(cat)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
-    errt ? `ncr_error_type=eq.${encodeURIComponent(errt)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
-    dept ? `ncr_dept=eq.${encodeURIComponent(dept)}&verdict=in.(approved,corrected)&order=created_at.desc&limit=5` : null,
-  ].filter(Boolean);
-
-  const seen = new Set();
-  const out = [];
-  for(const q of queries){
-    if(out.length>=5) break;
-    try{
-      const rows = await sbGet('ncr_rca_feedback', q);
-      for(const r of (rows||[])){
-        if(seen.has(r.id)) continue;
-        seen.add(r.id);
-        out.push(r);
-        if(out.length>=5) break;
-      }
-    }catch(_){}
-  }
-  return out;
 }
 
 async function applyRcaErrorType(ncrId, errorType){
@@ -8523,10 +7515,8 @@ async function applyRcaErrorType(ncrId, errorType){
   openDetail(ncrId);
 }
 
-async function saveRcaToNcr(){
-  const ncrId = window._lastRcaNcrId;
-  const r = window._lastRcaResult;
-  if(!ncrId || !r){ showToast('⚠️ Run an RCA first'); return; }
+async function saveRcaToNcr(ncrId, encodedResult){
+  const r = JSON.parse(decodeURIComponent(encodedResult));
   const ncr = ncrRecords.find(x=>x.id===ncrId);
   if(!ncr) return;
 
