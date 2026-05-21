@@ -7763,9 +7763,9 @@ function importCustomersFromExcel(input){
 // Init on page load
 window.addEventListener('load',()=>{
   checkAuthOnLoad();
-  populateSettings();
-  updatePortalView();
-  updateCustomerDatalist();
+  try{ populateSettings(); }catch(e){ console.warn('populateSettings:',e.message); }
+  try{ updatePortalView(); }catch(e){ console.warn('updatePortalView:',e.message); }
+  try{ updateCustomerDatalist(); }catch(e){ console.warn('updateCustomerDatalist:',e.message); }
 });
 // ═══════════════════════════════════════════════════════════════
 const COMP_KEY = 'ncr_components';
