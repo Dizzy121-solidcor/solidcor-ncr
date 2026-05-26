@@ -1439,10 +1439,20 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
     <div id="remakeAlert" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--amber);margin-top:4px">
       ⚠️ Remake selected — an email will be sent to Sales automatically on submission.
     </div>
-    <div class="form-row" style="margin-top:10px"><label>Photos</label>
-      <div class="scan-btn" onclick="document.getElementById('ncrPhotos').click()">
-        📷 Add photos
-        <input type="file" id="ncrPhotos" accept="image/*" multiple style="display:none" onchange="handleNcrPhotos(this)">
+    <div class="form-row" style="margin-top:10px"><label>Photos & attachments</label>
+      <div id="ncrRaiseDropZone"
+        style="border:2px dashed var(--border2);border-radius:var(--r);padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(224,123,26,.06)'"
+        ondragleave="this.style.borderColor='var(--border2)';this.style.background=''"
+        ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleRaiseFormDrop(event)"
+        onclick="document.getElementById('ncrRaiseFileInput').click()">
+        <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">📎 Drop files or click to browse · Images · PDFs · Emails</div>
+        <input type="file" id="ncrRaiseFileInput" multiple accept="image/*,.pdf,.doc,.docx,.eml,.msg,.txt" style="display:none" onchange="handleRaiseFormFiles(event)">
+        <div id="ncrRaiseFileList" style="margin-top:6px"></div>
+      </div>
+      <div class="scan-btn" onclick="document.getElementById('ncrPhotos').click()" style="margin-top:6px">
+        📷 Camera photos
+        <input type="file" id="ncrPhotos" accept="image/*" multiple capture="environment" style="display:none" onchange="handleNcrPhotos(this)">
       </div>
       <div class="photo-grid" id="ncrPhotoGrid"></div>
     </div>
@@ -1512,16 +1522,30 @@ td.ncr-num{font-family:var(--mono);font-weight:600;color:var(--accent)}
 
 <!-- STATUS MODAL -->
 <div class="modal-overlay hidden" id="statusModal">
-  <div class="modal" style="width:380px">
+  <div class="modal" style="width:420px">
     <h3>Update NCR Status</h3>
     <div class="form-row"><label>NCR</label>
       <input type="text" id="statNcrId" readonly style="background:var(--faint)">
     </div>
     <div class="form-row"><label>New status</label>
-      <select id="statNew">
+      <select id="statNew" onchange="document.getElementById('statOutcomeRow').style.display=this.value==='closed'?'block':'none'">
         <option value="open">🔴 Open</option>
         <option value="inprogress">🟡 In Progress</option>
         <option value="closed">✅ Closed</option>
+      </select>
+    </div>
+    <div class="form-row" id="statOutcomeRow" style="display:none"><label>Close outcome <span class="req-star">*</span></label>
+      <select id="statOutcome">
+        <option value="">— Select outcome —</option>
+        <option value="Claim justified">✅ Claim justified</option>
+        <option value="Unjustified claim">❌ Unjustified claim</option>
+        <option value="Unwarranted claim">⚠️ Unwarranted claim</option>
+        <option value="No fault found">🔍 No fault found</option>
+        <option value="Resolved by rework">🔧 Resolved by rework</option>
+        <option value="Resolved by remake">🔄 Resolved by remake</option>
+        <option value="Credit issued">💷 Credit issued</option>
+        <option value="Customer error">👤 Customer error</option>
+        <option value="Design issue">📐 Design issue</option>
       </select>
     </div>
     <div class="form-row"><label>Resolution notes</label>
@@ -1664,7 +1688,35 @@ let currentShift = 'Early (06:00–14:00)';
 let ncrRecords = JSON.parse(JSON.stringify(NCR_DATA));
 let actions = JSON.parse(localStorage.getItem('ncr_actions') || '[]');
 let returns = JSON.parse(localStorage.getItem('ncr_returns') || '[]');
-let ncrPhotos = [];
+let _raisePendingFiles=[];
+
+function handleRaiseFormDrop(event){
+  const files=[...(event.dataTransfer?.files||[])];
+  if(!files.length) return;
+  _raisePendingFiles.push(...files);
+  renderRaiseFileList();
+}
+
+function handleRaiseFormFiles(event){
+  const files=[...(event.target.files||[])];
+  if(!files.length) return;
+  _raisePendingFiles.push(...files);
+  renderRaiseFileList();
+  event.target.value='';
+}
+
+function renderRaiseFileList(){
+  const el=document.getElementById('ncrRaiseFileList');
+  if(!el) return;
+  if(!_raisePendingFiles.length){el.innerHTML='';return;}
+  el.innerHTML=_raisePendingFiles.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;background:var(--surface);border-radius:4px;margin-top:3px;font-size:11px;font-family:var(--mono)">
+      <span>${f.type.startsWith('image/')?'🖼':'📎'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${f.name}</span>
+      <span style="color:var(--muted)">${Math.round(f.size/1024)}KB</span>
+      <span onclick="event.stopPropagation();_raisePendingFiles.splice(${i},1);renderRaiseFileList()" style="cursor:pointer;color:var(--red);font-size:14px;line-height:1">×</span>
+    </div>`).join('');
+}
 let tableFilters = {all:'all', external:'all', internal:'all'};
 let tableSorts = {};
 let lastView = 'all';
@@ -2610,6 +2662,7 @@ function openDetail(id){
       ${r.action?`<div style="margin-top:8px;padding:10px;background:rgba(224,123,26,.06);border-left:2px solid var(--accent);font-size:12px;border-radius:var(--r)">${esc(r.action)}</div>`:''}
     </div>
     ${r.corrective?`<div class="detail-card" style="border-left:3px solid var(--green)"><h4 style="color:var(--green)">✅ Corrective action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.corrective)}</p></div>`:''}
+    ${r.close_outcome?`<div class="detail-card" style="border-left:3px solid var(--green)"><h4 style="color:var(--green)">🏁 Close outcome</h4><p style="font-size:14px;font-weight:600;color:var(--text)">${esc(r.close_outcome)}</p></div>`:''}
     ${r.preventive_action?`<div class="detail-card" style="border-left:3px solid #3b82f6"><h4 style="color:#3b82f6">🛡 Preventive action (CAPA)</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${esc(r.preventive_action)}</p></div>`:''}
     ${r.type==='external'?`
     <div class="detail-card" style="border-left:3px solid ${r.customer_contacted?'var(--green)':'#8b5cf6'}">
@@ -3123,6 +3176,9 @@ function openRaiseNCR(){
   document.getElementById('ncrUnits').value='1';
   document.getElementById('ncrCost').value='';
   document.getElementById('ncrAction').value='';
+  // Clear drag-drop pending files
+  _raisePendingFiles=[];
+  renderRaiseFileList();
   // Clear photos
   const pg=document.getElementById('ncrPhotoGrid');if(pg)pg.innerHTML='';
   ncrPhotos=[];
@@ -3309,6 +3365,14 @@ function submitNCR(){
   if(window._pendingDoorSheetImage){
     saveDoorSheetImage(id, window._pendingDoorSheetImage);
     window._pendingDoorSheetImage=null;
+  }
+
+  // Upload any dragged-in attachments
+  if(_raisePendingFiles.length){
+    const filesToUpload=[..._raisePendingFiles];
+    _raisePendingFiles=[];
+    renderRaiseFileList();
+    uploadAttachments(filesToUpload, id).catch(()=>{});
   }
 
   if(newNCR.customer_email) sendCustomerSubmissionEmail(newNCR);
@@ -5608,19 +5672,41 @@ async function createMaintTask(ncrId, idx){
 function openStatusModal(id){
   document.getElementById('statNcrId').value=id;
   const r=ncrRecords.find(x=>x.id===id);
-  document.getElementById('statNew').value=r?.status||'open';
+  const status=r?.status||'open';
+  document.getElementById('statNew').value=status;
+  document.getElementById('statOutcome').value=r?.close_outcome||'';
+  document.getElementById('statOutcomeRow').style.display=status==='closed'?'block':'none';
   document.getElementById('statNotes').value='';
   openModal('statusModal');
 }
-function saveStatus(){
+
+async function saveStatus(){
   const id=document.getElementById('statNcrId').value;
   const r=ncrRecords.find(x=>x.id===id);if(!r)return;
-  r.status=document.getElementById('statNew').value;
-  if(r.status==='closed') r.completed=new Date().toISOString().slice(0,10);
+  const newStatus=document.getElementById('statNew').value;
+  const outcome=document.getElementById('statOutcome').value;
   const notes=document.getElementById('statNotes').value.trim();
-  if(notes) r.corrective=(r.corrective?r.corrective+'\n':'')+notes;
+
+  if(newStatus==='closed'&&!outcome){
+    showToast('⚠️ Please select a close outcome');
+    return;
+  }
+
+  const patch={status:newStatus};
+  if(newStatus==='closed'){
+    patch.completed=new Date().toISOString().slice(0,10);
+    patch.close_outcome=outcome;
+  }
+  if(notes) patch.corrective=(r.corrective?r.corrective+'\n':'')+notes;
+
+  // Update in memory
+  Object.assign(r,patch);
+
+  // Persist to Supabase
+  await sbPatch('ncr_records',id,patch).catch(e=>showToast('⚠️ Save failed: '+e.message));
+
   closeModal('statusModal');
-  showToast('Status updated ✓');
+  showToast('✓ Status updated');
   renderTable('all');renderTable('external');renderTable('internal');
   renderDashboard();updateBadges();
   if(document.getElementById('view-detail').classList.contains('active')) openDetail(id);
