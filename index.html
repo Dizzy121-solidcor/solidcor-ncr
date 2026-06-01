@@ -3064,42 +3064,100 @@ function openAddReturn(){
   document.getElementById('retNotes').value='';
   openModal('returnModal');
 }
-function saveReturn(){
+function openAddReturn(){
+  document.getElementById('retNcr').value='';
+  document.getElementById('retCustomer').value='';
+  document.getElementById('retDoorRef').value='';
+  document.getElementById('retType').value='rework';
+  document.getElementById('retDate').value=new Date().toISOString().slice(0,10);
+  document.getElementById('retNotes').value='';
+  openModal('returnModal');
+}
+async function saveReturn(){
   const doorRef=document.getElementById('retDoorRef').value.trim();
   if(!doorRef){showToast('⚠️ Door reference is required');return;}
+  const loggedBy=(currentUser&&currentUser.name)?currentUser.name:'Unknown';
+  let linkedNcrId=document.getElementById('retNcr').value.trim()||null;
+  const customer=document.getElementById('retCustomer').value.trim();
+  const retType=document.getElementById('retType').value;
+  const retDate=document.getElementById('retDate').value||new Date().toISOString().slice(0,10);
+  const retNotes=document.getElementById('retNotes').value.trim();
+  if(!linkedNcrId){
+    const stubId=genNCRId(retDate);
+    const stub={
+      id:stubId,date:retDate,
+      customer:customer||'Unknown',
+      door_ref:doorRef,
+      ncr_type:'Door',
+      issue:'Return logged ('+retType+') — door '+doorRef+(retNotes?' — '+retNotes:''),
+      type:'external',status:'open',
+      category:'Return — '+retType,
+      dept:'External',
+      cost:0,transport:0,
+      root_cause:'',corrective:'',completed:null,
+      legacy:false,error_type:null,
+      raised_by:loggedBy,
+      source:'auto_from_return'
+    };
+    ncrRecords.unshift(stub);
+    await sbUps('ncr_records',stub).catch(()=>{});
+    linkedNcrId=stubId;
+    showToast('Created NCR '+stubId+' for this return');
+  }
   const ret={
     id:'ret_'+Date.now(),
-    ncr_id:document.getElementById('retNcr').value.trim()||null,
-    customer:document.getElementById('retCustomer').value.trim(),
-    door_ref:doorRef, type:document.getElementById('retType').value,
-    date:document.getElementById('retDate').value||new Date().toISOString().slice(0,10),
-    notes:document.getElementById('retNotes').value.trim(),
+    ncr_id:linkedNcrId,
+    customer:customer,
+    door_ref:doorRef,
+    type:retType,
+    date:retDate,
+    notes:retNotes,
+    logged_by:loggedBy,
     status:'pending'
   };
   returns.push(ret);
-  sbUps('ncr_returns',ret).catch(()=>localStorage.setItem('ncr_returns',JSON.stringify(returns)));
+  await sbUps('ncr_returns',ret).catch(()=>localStorage.setItem('ncr_returns',JSON.stringify(returns)));
   closeModal('returnModal');
   showToast('Return logged ✓');
   renderReturns();
-  updateBadges();
+  renderTable('all');renderTable('external');
+  renderDashboard();updateBadges();
 }
 function renderReturns(){
   const el=document.getElementById('returnsList');
   if(!returns.length){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No returns logged</div>';return;}
-  const icons={rework:'🔧',remake:'🔄',credit:'💰',inspect:'🔍'};
-  el.innerHTML=[...returns].reverse().map(r=>`
-    <div class="return-card">
-      <div class="return-icon">${icons[r.type]||'↩️'}</div>
-      <div class="return-info">
-        <div class="return-title">${esc(r.doorRef)} · ${esc(r.customer||'—')}</div>
-        <div class="return-meta">${r.date||'—'} · ${r.type.toUpperCase()} · NCR: ${r.ncrId||'—'} · Logged by ${r.loggedBy}</div>
-        ${r.notes?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(r.notes)}</div>`:''}
-      </div>
-      <div class="return-actions">
-        <span class="badge ${r.status==='done'?'b-closed':'b-open'}">${r.status}</span>
-        <button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="toggleReturn('${r.id}')">${r.status==='done'?'Reopen':'Mark done'}</button>
-      </div>
-    </div>`).join('');
+  const icons={rework:'🔧',remake:'🔄',credit:'💰',inspect:'🔍',scanned_return:'📦'};
+  el.innerHTML=[...returns].reverse().map(r=>{
+    const doorRef=r.door_ref||r.doorRef||'—';
+    const ncrRef=r.ncr_id||r.ncrId||null;
+    const loggedBy=r.logged_by||r.loggedBy||'—';
+    const retType=r.type||'—';
+    const status=r.status||'pending';
+    const ncrLink=ncrRef
+      ?'<a href="#" onclick="event.preventDefault();showView(\'detail\');setTimeout(()=>openDetail(\''+ncrRef+'\'),50)" style="color:var(--accent);text-decoration:underline">'+ncrRef+'</a>'
+      :'<span style="color:var(--faint)">None</span>';
+    return '<div class="return-card">'
+      +'<div class="return-icon">'+(icons[retType]||'↩️')+'</div>'
+      +'<div class="return-info">'
+      +'<div class="return-title">'+esc(doorRef)+' · '+esc(r.customer||'—')+'</div>'
+      +'<div class="return-meta">'+(r.date||'—')+' · '+retType.toUpperCase()+' · NCR: '+ncrLink+' · Logged by <strong>'+esc(loggedBy)+'</strong></div>'
+      +(r.notes?'<div style="font-size:12px;color:var(--muted);margin-top:4px">'+esc(r.notes)+'</div>':'')
+      +'</div>'
+      +'<div class="return-actions">'
+      +'<span class="badge '+(status==='done'?'b-closed':'b-open')+'">'+status+'</span>'
+      +'<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="toggleReturn(\''+r.id+'\')">'+( status==='done'?'Reopen':'Mark done')+'</button>'
+      +(ncrRef?'<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="showView(\'detail\');setTimeout(()=>openDetail(\''+ncrRef+'\'),50)">View NCR →</button>':'')
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+function toggleReturn(id){
+  const r=returns.find(x=>x.id===id);if(!r)return;
+  r.status=r.status==='done'?'pending':'done';
+  sbPatch('ncr_returns',id,{status:r.status}).catch(()=>localStorage.setItem('ncr_returns',JSON.stringify(returns)));
+  renderReturns();
+  updateBadges();
+  showToast(r.status==='done'?'✓ Return marked done':'Return reopened');
 }
 function toggleReturn(id){
   const r=returns.find(x=>x.id===id);if(!r)return;
@@ -8155,154 +8213,7 @@ function buildPortalForm(){
   if(fields.photo?.show) rows.push(`<div><label style="font-size:11px;font-family:var(--mono);color:var(--muted)">PHOTO (optional)</label><input id="p_photo" type="file" accept="image/*" style="width:100%;margin-top:5px"></div>`);
 
   return rows.join('');
-}
-// end
-// ================================================================
-// RETURNS LOG BUG FIX — RUNTIME PATCH
-// Paste this block at the END of the <script> tag in index.html,
-// just before the closing </script> tag.
-// ================================================================
 
-// ── FIX 1: saveReturn — capture logged_by, auto-create NCR stub, use snake_case ──
-window.saveReturn = async function saveReturn(){
-  const doorRef=document.getElementById('retDoorRef').value.trim();
-  if(!doorRef){showToast('⚠️ Door reference is required');return;}
-  const loggedBy=currentUser?.name||'Unknown';
-  let linkedNcrId=document.getElementById('retNcr').value.trim()||null;
-  const customer=document.getElementById('retCustomer').value.trim();
-  const retType=document.getElementById('retType').value;
-  const retDate=document.getElementById('retDate').value||new Date().toISOString().slice(0,10);
-  const retNotes=document.getElementById('retNotes').value.trim();
-
-  // If no NCR linked, auto-create a stub external NCR so every return has a traceable parent
-  if(!linkedNcrId){
-    const stubId=genNCRId(retDate);
-    const stubIssue='Auto-created from return ('+retType+') \u2014 door '+doorRef+(retNotes?'. Notes: '+retNotes:'. No additional notes.');
-    const stub={
-      id:stubId, date:retDate,
-      customer:customer||'Unknown',
-      door_ref:doorRef,
-      ncr_type:'Door',
-      issue:stubIssue,
-      type:'external', status:'open',
-      category:'Return \u2014 '+retType,
-      dept:'External',
-      cost:0, transport:0,
-      root_cause:'', corrective:'', completed:null,
-      legacy:false, error_type:null,
-      severity:retType==='inspect'?'Minor':'Major',
-      raised_by:loggedBy,
-      source:'auto_from_return'
-    };
-    ncrRecords.unshift(stub);
-    await sbUps('ncr_records',stub).catch(()=>{});
-    linkedNcrId=stubId;
-    showToast('\u2713 Created NCR '+stubId+' for this return');
-  }
-
-  const ret={
-    id:'ret_'+Date.now(),
-    ncr_id:linkedNcrId,
-    customer:customer,
-    door_ref:doorRef,
-    type:retType,
-    date:retDate,
-    notes:retNotes,
-    logged_by:loggedBy,
-    status:'pending'
-  };
-  returns.push(ret);
-  await sbUps('ncr_returns',ret).catch(()=>{
-    localStorage.setItem('ncr_returns',JSON.stringify(returns));
-  });
-  closeModal('returnModal');
-  showToast('Return logged \u2713');
-  renderReturns();
-  renderTable('all');renderTable('external');
-  renderDashboard();updateBadges();
-};
-
-// ── FIX 2: renderReturns — read both camelCase and snake_case, clickable NCR link ──
-window.renderReturns = function renderReturns(){
-  const el=document.getElementById('returnsList');
-  if(!returns.length){
-    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--faint);font-family:var(--mono)">No returns logged</div>';
-    return;
-  }
-  const icons={rework:'\uD83D\uDD27',remake:'\uD83D\uDD04',credit:'\uD83D\uDCB0',inspect:'\uD83D\uDD0D',scanned_return:'\uD83D\uDCE6'};
-  el.innerHTML=[...returns].reverse().map(r=>{
-    // Support both camelCase (legacy in-memory) and snake_case (from Supabase)
-    const doorRef  = r.door_ref    || r.doorRef   || '\u2014';
-    const ncrRef   = r.ncr_id      || r.ncrId     || null;
-    const loggedBy = r.logged_by   || r.loggedBy  || '\u2014';
-    const retType  = r.type        || '\u2014';
-    const status   = r.status      || 'pending';
-    const safeNcrRef = ncrRef ? ncrRef.replace(/'/g,"\\'") : '';
-    const ncrLink  = ncrRef
-      ? '<a href="#" onclick="event.preventDefault();openDetail(\''+safeNcrRef+'\')" style="color:var(--accent);text-decoration:underline">'+ncrRef+'</a>'
-      : '<span style="color:var(--faint)">None</span>';
-    const safeId = r.id ? r.id.replace(/'/g,"\\'") : '';
-    return '<div class="return-card">'
-      + '<div class="return-icon">'+(icons[retType]||'\u21A9\uFE0F')+'</div>'
-      + '<div class="return-info">'
-      + '<div class="return-title">'+esc(doorRef)+' \u00B7 '+esc(r.customer||'\u2014')+'</div>'
-      + '<div class="return-meta">'+(r.date||'\u2014')+' \u00B7 '+retType.toUpperCase()+' \u00B7 NCR: '+ncrLink+' \u00B7 Logged by <strong>'+esc(loggedBy)+'</strong></div>'
-      + (r.notes ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+esc(r.notes)+'</div>' : '')
-      + '</div>'
-      + '<div class="return-actions">'
-      + '<span class="badge '+(status==='done'?'b-closed':'b-open')+'">'+status+'</span>'
-      + '<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="toggleReturn(\''+safeId+'\')">'+(status==='done'?'Reopen':'Mark done')+'</button>'
-      + (ncrRef ? '<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="openDetail(\''+safeNcrRef+'\')">View NCR \u2192</button>' : '')
-      + '</div>'
-      + '</div>';
-  }).join('');
-};
-
-// ── FIX 3: toggleReturn — save to Supabase, show toast ──
-window.toggleReturn = function toggleReturn(id){
-  const r=returns.find(x=>x.id===id);if(!r)return;
-  r.status=r.status==='done'?'pending':'done';
-  sbPatch('ncr_returns',id,{status:r.status}).catch(()=>{
-    localStorage.setItem('ncr_returns',JSON.stringify(returns));
-  });
-  renderReturns();
-  updateBadges();
-  showToast(r.status==='done'?'\u2713 Return marked done':'Return reopened');
-};
-
-// ── FIX 4: Migrate any localStorage-only returns to Supabase on next load ──
-// This recovers the Harmony door entry that was saved locally but not to DB
-(function migrateLocalReturns(){
-  try{
-    const local=JSON.parse(localStorage.getItem('ncr_returns')||'[]');
-    if(!local.length) return;
-    const dbIds=new Set(returns.map(r=>r.id));
-    const orphans=local.filter(r=>!dbIds.has(r.id));
-    if(!orphans.length){ localStorage.removeItem('ncr_returns'); return; }
-    console.log('[Returns] Migrating '+orphans.length+' localStorage entries to Supabase...');
-    orphans.forEach(async o=>{
-      const normalised={
-        id:        o.id,
-        ncr_id:    o.ncr_id || o.ncrId || null,
-        customer:  o.customer || '',
-        door_ref:  o.door_ref || o.doorRef || '',
-        type:      o.type || '',
-        date:      o.date || new Date().toISOString().slice(0,10),
-        notes:     o.notes || '',
-        logged_by: o.logged_by || o.loggedBy || 'Unknown',
-        status:    o.status || 'pending'
-      };
-      await sbUps('ncr_returns',normalised).catch(e=>console.warn('Migration failed for '+o.id,e));
-      returns.push(normalised);
-    });
-    localStorage.removeItem('ncr_returns');
-    setTimeout(()=>{ renderReturns(); updateBadges(); }, 1500);
-    console.log('[Returns] Migration complete');
-  }catch(e){ console.warn('[Returns] Migration error:',e); }
-})();
-// ================================================================
-// END OF RETURNS LOG BUG FIX PATCH
-// ================================================================  
 </script>
 </body>
 </html>
