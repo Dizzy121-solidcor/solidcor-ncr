@@ -3139,6 +3139,7 @@ function renderReturns(){
       +'<span class="badge '+(status==='done'?'b-closed':'b-open')+'">'+status+'</span>'
       +'<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="toggleReturn(\''+r.id+'\')">'+( status==='done'?'Reopen':'Mark done')+'</button>'
       +(ncrRef?'<button class="top-btn ghost" style="padding:3px 8px;font-size:10px" onclick="showView(\'detail\');setTimeout(()=>openDetail(\''+ncrRef+'\'),50)">View NCR →</button>':'')
+      +(currentUser?.role==='superadmin'?'<button class="top-btn ghost" style="padding:3px 8px;font-size:10px;color:var(--red);border-color:var(--red)" onclick="deleteReturn(\''+r.id+'\')">?? Delete</button>':'')
       +'</div>'
       +'</div>';
   }).join('');
@@ -3150,6 +3151,23 @@ function toggleReturn(id){
   renderReturns();
   updateBadges();
   showToast(r.status==='done'?'✓ Return marked done':'Return reopened');
+}
+async function deleteReturn(id){
+  if(currentUser?.role!=='superadmin'){showToast('⚠️ Superadmin only');return;}
+  const r=returns.find(x=>x.id===id);
+  if(!confirm('Delete this return?\n\n'+(r?.door_ref||id)+' — '+(r?.customer||'')+(r?.date?' ('+r.date+')':'')+'
+
+This cannot be undone.'))return;
+  try{
+    await sbDel('ncr_returns',id);
+    const idx=returns.findIndex(x=>x.id===id);
+    if(idx>-1) returns.splice(idx,1);
+    renderReturns();
+    updateBadges();
+    showToast('✓ Return deleted');
+  }catch(e){
+    showToast('⚠️ Delete failed: '+e.message);
+  }
 }
 
 // ── Raise NCR ─────────────────────────────────────────────────────
