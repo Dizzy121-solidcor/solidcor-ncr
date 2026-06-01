@@ -3151,14 +3151,6 @@ function toggleReturn(id){
   updateBadges();
   showToast(r.status==='done'?'✓ Return marked done':'Return reopened');
 }
-function toggleReturn(id){
-  const r=returns.find(x=>x.id===id);if(!r)return;
-  r.status=r.status==='done'?'pending':'done';
-  sbPatch('ncr_returns',id,{status:r.status}).catch(()=>localStorage.setItem('ncr_returns',JSON.stringify(returns)));
-  renderReturns();
-  updateBadges();
-  showToast(r.status==='done'?'✓ Return marked done':'Return reopened');
-}
 
 // ── Raise NCR ─────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
