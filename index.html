@@ -3155,9 +3155,7 @@ function toggleReturn(id){
 async function deleteReturn(id){
   if(currentUser?.role!=='superadmin'){showToast('⚠️ Superadmin only');return;}
   const r=returns.find(x=>x.id===id);
-  if(!confirm('Delete this return?\n\n'+(r?.door_ref||id)+' — '+(r?.customer||'')+(r?.date?' ('+r.date+')':'')+'
-
-This cannot be undone.'))return;
+  if(!confirm('Delete this return?\n\n'+(r?.door_ref||id)+' — '+(r?.customer||'')+(r?.date?' ('+r.date+')':'')+'\n\nThis cannot be undone.'))return;
   try{
     await sbDel('ncr_returns',id);
     const idx=returns.findIndex(x=>x.id===id);
