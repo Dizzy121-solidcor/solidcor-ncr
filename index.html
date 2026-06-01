@@ -3055,15 +3055,7 @@ function renderActions(){
 }
 
 // ── Returns ───────────────────────────────────────────────────────
-function openAddReturn(){
-  document.getElementById('retNcr').value='';
-  document.getElementById('retCustomer').value='';
-  document.getElementById('retDoorRef').value='';
-  document.getElementById('retType').value='rework';
-  document.getElementById('retDate').value=new Date().toISOString().slice(0,10);
-  document.getElementById('retNotes').value='';
-  openModal('returnModal');
-}
+
 function openAddReturn(){
   document.getElementById('retNcr').value='';
   document.getElementById('retCustomer').value='';
@@ -3162,8 +3154,10 @@ function toggleReturn(id){
 function toggleReturn(id){
   const r=returns.find(x=>x.id===id);if(!r)return;
   r.status=r.status==='done'?'pending':'done';
-  localStorage.setItem('ncr_returns',JSON.stringify(returns));
+  sbPatch('ncr_returns',id,{status:r.status}).catch(()=>localStorage.setItem('ncr_returns',JSON.stringify(returns)));
   renderReturns();
+  updateBadges();
+  showToast(r.status==='done'?'✓ Return marked done':'Return reopened');
 }
 
 // ── Raise NCR ─────────────────────────────────────────────────────
